@@ -151,11 +151,21 @@ if __name__ == '__main__':
     generate_dampedspringdata(num_samples = 10000, sequence_length=65, plot = True)
     datadict = torch.load('data/dampedspring_data.pth')
     CL = 65
-    traindata = datadict['sequences_train_underdamped'][:1000]
-    testdata = datadict['sequences_test_underdamped'][:1000]
+    
+    traindata1 = datadict['sequences_train_underdamped']
+    traindata1 = traindata1[torch.randperm(traindata1.size()[0])]
+    testdata1 = datadict['sequences_test_underdamped']
+    testdata1 = testdata1[torch.randperm(testdata1.size()[0])]
+    trained_model1 = train(traindata1,testdata1, fname = 'springunderdamped', CL = CL)
 
+    traindata2 = datadict['sequences_train_overdamped']
+    traindata2 = traindata2[torch.randperm(traindata2.size()[0])]
+    testdata2 = datadict['sequences_test_overdamped']
+    testdata2 = testdata2[torch.randperm(testdata2.size()[0])]
+    trained_model2 = train(traindata2,testdata2, fname = 'springoverdamped', CL = CL)
 
-
-
-
-    trained_model = train(traindata,testdata, fname = 'springunderdamped', CL = CL)
+    traindata3 = torch.cat((datadict['sequences_train_underdamped'], datadict['sequences_train_overdamped']), dim = 0)
+    traindata3 = traindata3[torch.randperm(traindata3.size()[0])]
+    testdata3 = torch.cat((datadict['sequences_test_underdamped'], datadict['sequences_test_overdamped']), dim = 0)
+    testdata3 = testdata3[torch.randperm(testdata3.size()[0])]
+    trained_model3 = train(traindata3,testdata3, fname = 'springdamped', CL = CL)
