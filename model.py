@@ -125,6 +125,31 @@ class Transformer(nn.Module):
             x = self.ln_f(x)
         y = self.l_out(x)
         return y
+
+    def forward_hs(self, x, layernorm=False):
+        # Add positional embeddings
+        seq_length = x.size(1)
+        positions = torch.arange(0, seq_length, dtype=torch.long, device=x.device)
+        if seq_length > self.max_seq_length:
+            # add extra zeroes to positional embeddings
+            diff = seq_length - self.max_seq_length
+            extra_pos = torch.zeros(diff, self.n_embed, device=x.device)
+            pos_embeddings = torch.cat((self.positional_embeddings, extra_pos), dim=0)
+            
+        pos_embeddings = self.positional_embeddings[positions]
+
+        x = self.l_in(x)
+        x = x + pos_embeddings  # Add positional embeddings to input embeddings
+
+        hidden_states = [x.clone().detach()]
+
+        for i in range(self.n_layer):
+            x = self.blocks[i](x, layernorm)
+            hidden_states.append(x.clone().detach()) 
+        if layernorm:
+            x = self.ln_f(x)
+        y = self.l_out(x)
+        return y, hidden_states
         
 
 

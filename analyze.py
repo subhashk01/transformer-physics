@@ -1,9 +1,17 @@
 import torch
 import matplotlib.pyplot as plt
-from model import Transformer
 from config import get_default_config
 import numpy as np
 import torch.nn as nn
+from matplotlib.ticker import ScalarFormatter
+from util import load_model, get_hidden_state
+from scipy.stats import pearsonr
+from sklearn.decomposition import PCA
+from sklearn.feature_selection import mutual_info_regression
+from inspector_models import NonLinearProbe
+from scipy.stats import linregress
+
+
 
 config = get_default_config()
 
@@ -25,33 +33,35 @@ def plot_loss_curves(file = 'models/spring_16emb_2layer_10CL_20000epochs_0.001lr
     plt.legend()
     plt.show()
 
-def load_model(file='models/spring_16emb_2layer_10CL_20000epochs_0.001lr_64batch_model.pth'):
-    config = get_default_config()
-    model = Transformer(config)
-    model_state = torch.load(file)
-    model.load_state_dict(model_state)
-    model.eval()
-    return model
 
-def loss_deltat_omega_relationship(model):
+
+def loss_deltat_omega_relationship(model, CL = 10):
+    """
+    We want to see how the loss varies with deltat and omega,
+    the two effective parameters we give our model.
+    Note that x = cos(wt), v = -wsin(wt). where t = deltat * i for integer i
+    """
+
     datadict = torch.load('data/spring_data.pth')
-    traindata = datadict['sequences_train']
-    trainomegas = datadict['train_omegas']
-    testdata = datadict['sequences_test']
-    testomegas = datadict['test_omegas']
-    traintimes = datadict['train_times']
-    testtimes = datadict['test_times']
+    traindata = datadict['sequences_train'][:, :CL+1, :]
+    div = int(0.8*traindata.shape[0])
+    traindata = traindata[:div]
+    trainomegas = datadict['train_omegas'][:div]
+    traintimes = datadict['train_times'][:div, :CL+1]
     train_deltat = traintimes[:,1] - traintimes[:,0]
-    test_deltat = testtimes[:,1] - testtimes[:,0]
-
-    model.eval()
     Xtrain,ytrain = traindata[:,:-1,:],traindata[:,1:,:]
+
+    testdata = datadict['sequences_test'][:, :CL+1, :]
+    testomegas = datadict['test_omegas']
+    testtimes = datadict['test_times'][:, :CL+1]
+    test_deltat = testtimes[:,1] - testtimes[:,0]
     Xtest,ytest = testdata[:,:-1,:],testdata[:,1:,:]
 
     with torch.no_grad():
         ytrain_pred = model(Xtrain)
         MSE_train = (ytrain_pred - ytrain)**2
         MSE_train = torch.mean(MSE_train, dim=(1, 2)).numpy()  # Squeeze and convert to numpy
+
         ytest_pred = model(Xtest)
         MSE_test = (ytest_pred - ytest)**2
         MSE_test = torch.mean(MSE_test, dim=(1, 2)).numpy()  # Squeeze and convert to numpy
@@ -70,182 +80,166 @@ def loss_deltat_omega_relationship(model):
         cbar = plt.colorbar(scatter)
         cbar.set_label('Mean Squared Error (MSE)')
 
+        # Use scientific notation for color bar tick labels
+        cbar.formatter.set_scientific(True)
+        cbar.formatter.set_powerlimits((0, 0))
+        cbar.update_ticks()
+
         plt.show()
 
-def plot_model_predictions(model):
+def test_ICL(model):
+    """
+    This function `test_ICL` evaluates a model's performance using mean squared error on different
+    context lengths for in-distribution and out-of-distribution test sets.
+    """
+
     datadict = torch.load('data/spring_data.pth')
-    
-    n = 4
-    #CL = 2**n
-    CL = 4
-    #indices = np.linspace(start = 0, stop = traindata.shape[1]-1, num = CL+1, dtype = int)
-    traindata = datadict['sequences_train'][:,:CL+1,:]
-    trainomegas = datadict['train_omegas']
-    testdata = datadict['sequences_test'][:,:CL+1,:]
-    testomegas = datadict['test_omegas']
-
-    traintimes = datadict['train_times']
-    testtimes = datadict['test_times']
-    deltat_train = traintimes[:,1] - traintimes[:,0]
-    deltat_test = testtimes[:,1] - testtimes[:,0]
-
-    
-
-
-    # randomize all test data
-    # randomize test data
-    indices = np.random.permutation(testdata.shape[0])
-    testdata = testdata[indices]
-    testomegas = testomegas[indices]
-    deltat_test = deltat_test[indices]
-    
-
-
-    model.eval()
-    Xtrain,ytrain = traindata[:,:-1,:],traindata[:,1:,:]
-    Xtest,ytest = testdata[:,:-1,:],testdata[:,1:,:]
-
-    
-
-
-    with torch.no_grad():
-        ytrain_pred = model(Xtrain)
-        MSEs_train = (ytrain_pred - ytrain)**2
-        ytest_pred = model(Xtest)
-        MSEs_test = (ytest_pred - ytest)**2
-        for i in range(3):
-            plt.figure(figsize = (10,6))
-
-            plt.plot(ytrain[i,:,0], ytrain[i,:,1].numpy(), 'b-', label = 'Training y Data')
-            plt.plot(ytrain_pred[i,:,0], ytrain_pred[i,:,1].numpy(), 'r--', label = 'Training y Predictions')
-
-            plt.scatter(ytrain[i,0,0], ytrain[i,0,1].numpy(), c = 'b', label = 'Data Start')
-            plt.scatter(ytrain_pred[i,0,0], ytrain_pred[i,0,1].numpy(), c = 'r', label = 'Pred Start')
-
-            plt.scatter(ytrain[i,-1,0], ytrain[i,-1,1].numpy(), marker = '*',s = 100, c = 'b', label = 'Data End')
-            plt.scatter(ytrain_pred[i,-1,0], ytrain_pred[i,-1,1].numpy(), s = 100, marker = '*', c = 'r', label = 'Pred End')
-            plt.xlabel('x = cos(wt)')
-            plt.ylabel('v = -wsin(wt)')
-            plt.title(f'Training Data and Prediction, CL = {CL} \nDatum {i}: Omega = {trainomegas[i].item():.2f}, deltaT = {deltat_train[i].item():.2f}, MSE = {MSEs_train[i].mean().item():.2e}')
-            plt.legend()
-            plt.show()
-        for j in range(0):
-            # do the same thing but for test data
-            plt.figure(figsize = (10,6))
-            plt.plot(ytest[j,:,0], ytest[j,:,1].numpy(), 'b-', label = 'Test y Data')
-            plt.plot(ytest_pred[j,:,0], ytest_pred[j,:,1].numpy(), 'r--', label = 'Test y Predictions')
-
-            plt.scatter(ytest[j,0,0], ytest[j,0,1].numpy(), c = 'b', label = 'Data Start')
-            plt.scatter(ytest_pred[j,0,0], ytest_pred[j,0,1].numpy(), c = 'r', label = 'Pred Start')
-
-            plt.scatter(ytest[j,-1,0], ytest[j,-1,1].numpy(), marker = '*',s = 100, c = 'b', label = 'Data End')
-            plt.scatter(ytest_pred[j,-1,0], ytest_pred[j,-1,1].numpy(), s = 100, marker = '*', c = 'r', label = 'Pred End')
-            plt.xlabel('x = cos(wt)')
-            plt.ylabel('v = -wsin(wt)')
-            plt.title(f'Training Data and Prediction, CL = {CL} \nDatum {j}: Omega = {testomegas[j].item():.2f}, deltaT = {deltat_test[j].item():.2f}, MSE = {MSEs_test[j].mean().item():.2e}')
-            plt.legend()
-            plt.show()
-        
-
-def study_ICL(model, plotex = False):
-    model.eval()
-    datadict = torch.load('data/spring_data.pth')
-    traindata =  datadict['sequences_train']
+    traindata = datadict['sequences_train']
+    testdata = datadict['sequences_test']
     div = int(0.8*traindata.shape[0])
-    testindata = datadict['sequences_train'][div:]
-    testoutdata = datadict['sequences_test']
-
-    context_length = []
-    MSE_ins = []
-    MSE_outs = []
-
-    floor_val = min(traindata.shape[1], config.max_seq_length)
-    floor_val = int(np.floor(np.log2(floor_val)))
-    print(floor_val)
-    testindata = testindata[:,:2**floor_val+1,:]
-    testoutdata = testoutdata[:,:2**floor_val+1,:]
-    print(testindata.shape)
-    
-    for n in range(floor_val+1):
+    criterion = nn.MSELoss()
+    MSEs_train = []
+    MSEs_test = []
+    CLs = []
+    #print(config.max_seq_length)
+    fig, axs = plt.subplots(1, 2, figsize = (11,5))
+    for CL in range(1,65):
+        train = traindata[:div, :CL+1, :]
+        Xtrain,ytrain = train[:,:-1,:],train[:,1:,:]
+        test = testdata[:, :CL+1, :]
+        Xtest,ytest = test[:,:-1,:],test[:,1:,:]
         with torch.no_grad():
-            CL = 2**n
-            context_length.append(CL)
-            indices = np.linspace(start = 0, stop = testindata.shape[1]-1, num = CL+1)
-            testin = testindata[:,:CL+1,:] #indices.astype(int)
-            testout = testoutdata[:,:CL+1,:]
-            #how tf ru making predictions about one data point?
-
-            Xin, yin = testin[:,:-1,:], testin[:,1:,:]
-            breakpoint()
-            Xout, yout = testout[:,:-1,:], testout[:,1:,:]
-            ypred_in = model(Xin)
-            ypred_out = model(Xout)
-
-
-            criterion = torch.nn.MSELoss()
-            MSE_in = criterion(ypred_in, yin).item()
-            print(CL, MSE_in)
-
-            deltayin = ypred_in - yin
-            print(deltayin[:5])
-            print()
-
-            MSE_ins.append(MSE_in)
-            MSE_out = criterion(ypred_out, yout).item()
-            MSE_outs.append(MSE_out)
+            ytrain_pred = model(Xtrain)
+            MSE_train = criterion(ytrain_pred, ytrain).item()
+            ytest_pred = model(Xtest)
+            MSE_test = criterion(ytest_pred, ytest).item()
+        CLs.append(CL)
+        MSEs_train.append(MSE_train)
+        MSEs_test.append(MSE_test)
+    xlog = np.log(CLs)
+    ylog = np.log(MSEs_train)
+    # find linear relationship between log of CLs and log of MSEs
+    slope, intercept, r_value, p_value, std_err = linregress(xlog, ylog)
+    ypredlog = slope*xlog+intercept
+    ypred = np.exp(ypredlog)
 
 
-            if plotex:
-                for ind in range(3):
-                    plt.figure(figsize = (10,6))
-                    plt.title(f'Context Length = {CL}, Datum {ind}')    
-                    print(yin.shape, 'yo')
-                    yin = yin.squeeze()
-                    ypred_in = ypred_in.squeeze()
-                    plt.plot(testin[ind, :, 0].numpy(), testin[ind, :, 1].numpy(), 'b--', label = 'Input Data')
-                    plt.scatter(yin[ind, 0].item(), yin[ind, 1].item(), c = 'b', label = 'Input Data End')
-                    plt.scatter(ypred_in[ind, 0].item(), ypred_in[ind, 1].item(), c = 'b',marker = '*', label = 'Input Prediction End')
-                    plt.legend()
-                    plt.show()
-            
-    plt.figure(figsize = (10,6))
-    plt.axvline(x = 10, color = 'k', linestyle = '--', label = 'Training Data Length')
-            
-            
-    plt.plot(context_length, MSE_ins, color = 'b',marker = 'o', label = 'Test-In MSE')
-    plt.plot(context_length, MSE_outs, color = 'r', marker = 'o', label = 'Test-Out MSE')
-    #make tick marks powers of 2
-    # Set the x-axis to logarithmic scale
-    plt.xscale('log', base=2)
-    plt.yscale('log', base=2)
-
-    # Manually set the ticks and labels after setting the logarithmic scale
-    logs = [int(np.log2(n)) for n in context_length]
-    plt.xticks(ticks=context_length, labels=[rf'$2^{{{log}}}$' for log in logs])
-
-    plt.xlabel('Context Length')
-    plt.ylabel('MSE Over Dataset')
-    plt.title('MSE vs Context Length with In/Out of Distribution Test Data')
-    plt.legend()
+    axs[0].plot(CLs, MSEs_train, c = 'b', label = f'Test Set - In Distribution')
+    axs[0].plot(CLs, ypred, c = 'b',linestyle = '--', label = f'log(MSE) = {slope:.2f}log(CL)+{intercept:.2f}, R^2 = {r_value**2:.2f}')
+    axs[1].plot(CLs, MSEs_test, c = 'r', label = 'Test Set - Out of Distribution')
+    for i in range(2):
+        axs[i].set_xlabel('Context Length')
+        axs[i].set_ylabel('MSE')
+        axs[i].legend()
+        axs[i].ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+        axs[i].set_yscale('log')
+        axs[i].set_xscale('log')
+    fig.suptitle('MSE vs CL In Distribution Test\nTrained on 65CL')
     plt.show()
 
-            
+
+def analyze_hiddenstates(model, target = 'omegas'):
+    CL = 10
+    datadict = torch.load('data/spring_data.pth')
+    data = torch.cat((datadict['sequences_test'], datadict['sequences_train']), dim=0)[:,:CL+1,:]
+    omegas = torch.cat((datadict['test_omegas'], datadict['train_omegas']), dim=0)
+    times = torch.cat((datadict['test_times'], datadict['train_times']), dim=0)[:, :CL+1]
+    deltat = times[:,1] - times[:,0]
+    target_dict = {'omegas':omegas, 'deltat':deltat}
+    target_vals = target_dict[target]
+
+    _, hidden_states = model.forward_hs(data[:,:-1,:])
+    hidden_states = torch.stack(hidden_states)
+    hidden_states = hidden_states.transpose(0, 1)
+
+    # Calculate correlation coefficients
+    correlations = []
+    for layer in range(hidden_states.shape[1]):  # Iterate over layers
+        layer_correlations = []
+        for state in range(hidden_states.shape[2]):  # Iterate over hidden states
+            state_correlations = []
+            for dim in range(hidden_states.shape[3]):  # Iterate over dimensions
+                feature = hidden_states[:, layer, state, dim].unsqueeze(1).numpy()  # Convert to numpy array
+                correlation = mutual_info_regression(feature, target_vals.numpy())[0]  # CALCULATE MI
+                #correlation, _ = pearsonr(feature, target_vals.numpy())  # Calculate Pearson correlation coefficient
+                state_correlations.append(abs(correlation))  # Store absolute value of correlation
+                
+            layer_correlations.append(np.mean(state_correlations))  # Sum of absolute correlations for each state
+        correlations.append(layer_correlations)
+    correlations = np.array(correlations)
+
+    layer_corr = np.mean(correlations, axis=1)  # Average correlation for each layer
+    hs_corr = np.mean(correlations, axis=0)  # Average correlation for each hidden state
+
+
+    # Plotting
+    fig, ax = plt.subplots(figsize=(12, 5))
+    cax = ax.matshow(correlations, cmap='viridis')
+    cbar = fig.colorbar(cax)
+    cbar.set_label('Avg. Mag of Correlation Across Embedding')  # Set label for color bar
+
+    # Set x and y ticks manually
+    ax.set_xticks(range(correlations.shape[1]))  # Assuming you have 10 hidden states
+    ax.set_yticks(range(correlations.shape[0]))   # Assuming you have 3 layers
+    ax.set_xticklabels([f'{i}\n{hs_corr[i]:.2f}' for i in range(correlations.shape[1])])
+    ax.set_yticklabels([f'After Pos Emb\n{layer_corr[0]:.2f}']+[f'After Layer {i}\n{layer_corr[i]:.2f}' for i in range(1,correlations.shape[0])])
+    ax.set_xlabel('Hidden State')
+    #ax.set_ylabel('Layer')
+
+    # Add text annotations with the correlation values
+    for i in range(correlations.shape[0]):
+        for j in range(correlations.shape[1]):
+            ax.text(j, i, f'{correlations[i, j]:.2f}', ha='center', va='center', color='white')
+
+    ax.set_title(f'Pearson Correlation of Hidden States with {target}\nTest on CL = {CL}, Train w/ {hidden_states.shape[1] - 1}Layers, {hidden_states.shape[-1]}Emb, 65CL')
+    plt.show()
+    return np.array(correlations)  # Shape: [3, 10], representing overall correlation for each hidden state in each layer
+
+def plot_neuron(model, layer = 0, neuron = 0, target = 'omegas', CL = 10):
+
+    hidden_states, target_vals = get_hidden_state(model, CL, layer, neuron, target)
+    corrs = []
+    for i in range(hidden_states.shape[1]):
+        corr_interim, _ = pearsonr(hidden_states[:,i].numpy(), target_vals.numpy())
+        corrs.append(corr_interim)
+    corrs = np.abs(np.array(corrs))
+    # Calculate mutual information
+
+    corr = np.mean(corrs)
+    
+    pca = PCA(n_components=2)
+    pcs = pca.fit_transform(hidden_states)
+    fig, ax = plt.subplots(figsize = (10,6))
+    cax = ax.scatter(pcs[:, 0], pcs[:, 1], c=target_vals, cmap='viridis')
+    cbar = fig.colorbar(cax)
+    cbar.set_label(f'{target}\nAvg Corr on Emb = {corr:.2f}')  # Set label for color bar
+
+    vars = pca.explained_variance_ratio_
+    # set label on colorbar
+    ax.set_xlabel(f'PC1 {vars[0]*100:.2f}% Var')
+    ax.set_ylabel(f'PC2 {vars[1]*100:.2f}% Var')
+    ax.set_title(f'PCA of Hidden States in Layer {layer}, Neuron {neuron} w/ {target}\nTest on CL = {CL}, Train w/ {hidden_states.shape[1] - 1}Layers, {hidden_states.shape[-1]}Emb, 65CL\n{100*np.sum(vars):.1f}% Var Captured')
+    plt.show()
+
+
+
+
+    
 
 
 if __name__ == '__main__':
-    model = load_model()
-    # new_max_seq_length = 1024  # New desired maximum sequence length
-    # new_positional_embeddings = nn.Parameter(torch.zeros(new_max_seq_length, model.n_embed))
-    # new_positional_embeddings[:model.max_seq_length].data = model.positional_embeddings.data
-
-    # model.positional_embeddings = new_positional_embeddings
-    # model.max_seq_length = new_max_seq_length
+    losspath = 'models/spring_16emb_2layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
+    modelpath = 'models/spring_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth'
+    model = load_model(file = modelpath)
+    #plot_neuron(model)
+    test_ICL(model)
 
 
+    #test_ICL(model)
+    # for layer in [0]:
+    #     for neuron in range(1):
+    #         plot_neuron(model,layer = layer, neuron = neuron, target = 'omegas')
+    #pca.explained_variance_ratio_
 
-    #plot_loss_curves()
     #loss_deltat_omega_relationship(model)
-    #plot_model_predictions(model)
-    study_ICL(model, plotex = True)
-    #print('here')
-    #plot_model_predictions(model)
+    #plot_loss_curves(file = losspath)
