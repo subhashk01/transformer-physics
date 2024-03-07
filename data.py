@@ -197,7 +197,7 @@ def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = Fal
         'gammas_train_underdamped': gammas_train_under,
 
         'sequences_test_underdamped': sequences_test_under,
-        'omegas_train_underdamped': omegas_test_under,
+        'omegas_test_underdamped': omegas_test_under,
         'times_test_underdamped': times_test_under,
         'gammas_test_underdamped': gammas_test_under,
 
@@ -207,7 +207,7 @@ def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = Fal
         'gammas_train_overdamped': gammas_train_over,
         
         'sequences_test_overdamped': sequences_test_over,
-        'omegas_train_overdamped': omegas_test_over,
+        'omegas_test_overdamped': omegas_test_over,
         'times_test_overdamped': times_test_over,
         'gammas_test_overdamped': gammas_test_over,
 
@@ -225,6 +225,6 @@ def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = Fal
     #return sequences_train, train_omegas, sequences_test, test_omegas
 
 if __name__ == '__main__':
-    generate_dampedspringdata(num_samples = 10000, sequence_length=65, plot = True)
+    generate_dampedspringdata(num_samples = 10000, sequence_length=65, plot = False)
     #plot_training_data()
     #playground()

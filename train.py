@@ -148,10 +148,10 @@ if __name__ == '__main__':
     # trainomegas = datadict['train_omegas']
     # testdata = datadict['sequences_test']
     # testomegas = datadict['test_omegas']
-    generate_dampedspringdata(num_samples = 10000, sequence_length=65, plot = True)
+    #generate_dampedspringdata(num_samples = 10000, sequence_length=65, plot = True)
     datadict = torch.load('data/dampedspring_data.pth')
     CL = 65
-    
+
     traindata1 = datadict['sequences_train_underdamped']
     traindata1 = traindata1[torch.randperm(traindata1.size()[0])]
     testdata1 = datadict['sequences_test_underdamped']
