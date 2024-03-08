@@ -3,11 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from tqdm import tqdm
-from util import load_model, get_hidden_state
+from util import load_model, get_hidden_state_old, get_hidden_state
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score
 from sklearn.decomposition import PCA
 import numpy as np
+import os
 
 
 class NonLinearProbe(nn.Module):
@@ -98,10 +99,11 @@ def train_probe(inspector, train_hidden_states, train_target_vals, test_hidden_s
 
     return loss.item(), test_loss.item()
 
-def probe_hiddenstate(model, linear = False, layer = 0, neuron = 0, target = 'omegas', CL = 10, epochs = 10000, plot = True):
+def probe_hiddenstate(model, modelname, data, target_name, target_vals, linear = False, layer = 0, neuron = 0, CL = 10, epochs = 10000, plot = True):
 
-    hidden_states, target_vals = get_hidden_state(model, CL, layer, neuron, target)
+    hidden_states= get_hidden_state(model, data, CL, layer, neuron)
 
+    linear_name = {True: 'Linear', False: 'NonLinear'}
     if linear:
         inspector = LinearProbe(hidden_states.shape[-1], 1)
     else:
@@ -110,7 +112,7 @@ def probe_hiddenstate(model, linear = False, layer = 0, neuron = 0, target = 'om
     # randomize hidden_states and target_vals
     indices = torch.randperm(hidden_states.shape[0])
     hidden_states = hidden_states[indices]
-    target_vals = target_vals[indices]
+    target_vals = target_vals[indices] #TODO CHANGE BACK
     # split into test train
     div = int(0.8*hidden_states.shape[0])
     train_hidden_states = hidden_states[:div]
@@ -122,23 +124,28 @@ def probe_hiddenstate(model, linear = False, layer = 0, neuron = 0, target = 'om
     target_pred = inspector(hidden_states).detach().numpy()
     r_squared = r2_score(target_vals, target_pred)
 
+    # see if folder model name is in directory probes
+    if not os.path.exists(f'probes/{modelname}'):
+        os.makedirs(f'probes/{modelname}')
+    # save inspector model
+    torch.save(inspector.state_dict(), f'probes/{modelname}/{target_name}_layer{layer}_neuron{neuron}_{linear_name[linear]}_probe.pth')
     if plot:
         plt.scatter(target_vals, target_pred, color = 'b')
-        plt.title(f'3Layer NN Predictor of Omega from Hidden State\nLayer = {layer}, Neuron = {neuron}\nR^2: {r_squared:.2f}. Train Loss = {train_loss:.2e}, Test Loss = {test_loss:.2e}')
+        plt.title(f'2Layer NN Predictor of {target_name} from Hidden State\nLayer = {layer}, Neuron = {neuron}\nR^2: {r_squared:.2f}. Train Loss = {train_loss:.2e}, Test Loss = {test_loss:.2e}')
         # linear regression between target vals and pred
-        plt.xlabel(f'True Values of {target}')
-        plt.ylabel(f'Predicted Values of {target}')
+        plt.xlabel(f'True Values of {target_name}')
+        plt.ylabel(f'Predicted Values of {target_name}')
         plt.show()
 
     return r_squared
 
-def probe_hiddenstates(model, linear = False, target = 'omegas', CL = 10, epochs = 10000, num_layers = 2):
+def probe_hiddenstates(model, modelname, data, target_vals, target_name, linear = False, CL = 10, epochs = 10000, num_layers = 2):
     correlations = []
     for layer in range(num_layers+1):
         layer_corr = []
         for neuron in range(CL):
             print(f'Layer: {layer}, Neuron: {neuron}')
-            r2 = probe_hiddenstate(model, layer = layer, neuron = neuron, target = target, CL = CL, epochs = epochs, plot = False, linear = linear)
+            r2 = probe_hiddenstate(model, modelname, data, layer = layer, neuron = neuron, target_vals = target_vals, target_name = target_name,  CL = CL, epochs = epochs, plot = False, linear = linear)
             print(f'R^2: {r2:.2f}')
             layer_corr.append(r2)
         correlations.append(layer_corr)
@@ -166,14 +173,14 @@ def probe_hiddenstates(model, linear = False, target = 'omegas', CL = 10, epochs
         for j in range(correlations.shape[1]):
             ax.text(j, i, f'{correlations[i, j]:.2f}', ha='center', va='center', color='white')
 
-    ax.set_title(f'R^2 of {labeldict[linear]} 2Layer NN w/ Hidden States with {target}\nTest on CL = {CL}, Train w/ {num_layers}Layers, 16Emb, 65CL')
-    plt.show()
+    ax.set_title(f'{modelname} Model \n R^2 of {labeldict[linear]} 2Layer NN w/ Hidden States with {target_name}\nTest on CL = {CL}, Train w/ {num_layers}Layers, 16Emb, 65CL')
+    plt.savefig(f'figures/{modelname}_{target_name}_{labeldict[linear]}_probes.png')
     return np.array(correlations)  # Shape: [3, 10], representing overall correlation for each hidden state in each layer
 
 
 
 def check_ellipse(model, layer=0, neuron=0, target='omegas', CL=10, poly_deg = 2):
-    hidden_states, target_vals = get_hidden_state(model, CL, layer, neuron, target)
+    hidden_states, target_vals = get_hidden_state_old(model, CL, layer, neuron, target)
     ellipse_probe = EllipseProbe(poly_deg=poly_deg)
     optimizer = optim.Adam(ellipse_probe.parameters(), lr=0.01)
     print('here1')
@@ -226,7 +233,7 @@ def check_ellipse(model, layer=0, neuron=0, target='omegas', CL=10, poly_deg = 2
 #             ws.append(w)
 
 def plot_ellipse(model, layer=0, neuron=0, target='omegas', CL=10):
-    hidden_states, target_vals = get_hidden_state(model, CL, layer, neuron, target)
+    hidden_states, target_vals = get_hidden_state_old(model, CL, layer, neuron, target)
     pca = PCA(n_components=2)
     pcs = pca.fit_transform(hidden_states)
     pcs = torch.tensor(pcs, dtype=torch.float32)
