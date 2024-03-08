@@ -187,6 +187,14 @@ def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = Fal
     #         plt.legend()
     #     plt.show()
  
+    sequences_train_damped = torch.cat((sequences_train_under, sequences_train_over, ), dim = 0)
+    sequences_test_damped = torch.cat((sequences_test_under, sequences_test_over), dim = 0)
+    omegas_train_damped = torch.cat((omegas_train_under, omegas_train_over), dim = 0)
+    omegas_test_damped = torch.cat((omegas_test_under, omegas_test_over), dim = 0)
+    times_train_damped = torch.cat((times_train_under, times_train_over), dim = 0)
+    times_test_damped = torch.cat((times_test_under, times_test_over), dim = 0)
+    gammas_train_damped = torch.cat((gammas_train_under, gammas_train_over), dim = 0)
+    gammas_test_damped = torch.cat((gammas_test_under, gammas_test_over), dim = 0)
 
 
 
@@ -210,6 +218,17 @@ def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = Fal
         'omegas_test_overdamped': omegas_test_over,
         'times_test_overdamped': times_test_over,
         'gammas_test_overdamped': gammas_test_over,
+
+        'sequences_train_damped': sequences_train_damped,
+        'omegas_train_damped': omegas_train_damped,
+        'times_train_damped': times_train_damped,
+        'gammas_train_damped': gammas_train_damped,
+        
+        'sequences_test_damped': sequences_test_damped,
+        'omegas_test_damped': omegas_test_damped,
+        'times_test_damped': times_test_damped,
+        'gammas_test_damped': gammas_test_damped,
+
 
 
 
