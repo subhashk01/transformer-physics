@@ -306,14 +306,17 @@ if __name__ == '__main__':
         omega = torch.sqrt(torch.abs(omega0**2 - gamma**2))
 
         targetdict = {
-                    'omega0':omega0, 
-                    'omega0^2': omega0**2, 
-                    'omega\lambda': omega, 
-                    'omega^2\lambda^2':omega**2, 
-                    'gammadivomega': gamma/omega,
-                    'vprec_under': (gamma**2+omega**2)/omega, 
-                    'gammas':gamma,
-                    'deltat':deltat}
+                    # 'omega0':omega0, 
+                    # 'omega0^2': omega0**2, 
+                    # 'omega\lambda': omega, 
+                    # 'omega^2\lambda^2':omega**2, 
+                    # 'gammadivomega': gamma/omega,
+                    # 'vprec_under': (gamma**2+omega**2)/omega, 
+                    # 'gammas':gamma,
+                    # 'deltat':deltat,
+                    'omega0^2deltat': omega0**2*deltat,
+                    'gammadeltat': gamma*deltat
+                    }
         model = models[modelkey]
         print(modelkey)
         for target_name in targetdict.keys():
