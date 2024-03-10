@@ -314,8 +314,13 @@ if __name__ == '__main__':
                     # 'vprec_under': (gamma**2+omega**2)/omega, 
                     # 'gammas':gamma,
                     # 'deltat':deltat,
-                    'omega0^2deltat': omega0**2*deltat,
-                    'gammadeltat': gamma*deltat
+                    # 'omega0^2deltat': omega0**2*deltat,
+                    # 'gammadeltat': gamma*deltat,
+                    'omega0deltat': omega0*deltat,
+                    'omega0^2deltat^2': omega0**2*deltat**2,
+                    'gammadeltat^2': gamma*deltat**2,
+                    'gammaomega0^2deltat^2': gamma*omega0**2*deltat**2,
+                    'fourgamma^2minusomega0^2deltat^2': (4*gamma**2-omega0**2)*deltat**2,
                     }
         model = models[modelkey]
         print(modelkey)
