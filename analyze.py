@@ -4,11 +4,11 @@ from config import get_default_config
 import numpy as np
 import torch.nn as nn
 from matplotlib.ticker import ScalarFormatter
-from util import load_model, get_hidden_state, get_hidden_state_old
+from util import load_model, get_hidden_state, get_hidden_state_old, set_seed
 from scipy.stats import pearsonr
 from sklearn.decomposition import PCA
 from sklearn.feature_selection import mutual_info_regression
-from inspector_models import NonLinearProbe, probe_hiddenstate, probe_hiddenstates
+from inspector_models import NonLinearProbe, probe_hiddenstate, probe_hiddenstates, LinearProbe
 from scipy.stats import linregress
 
 
@@ -274,6 +274,7 @@ def generate_targets(omega, gamma, deltat):
 
 
 if __name__ == '__main__':
+    set_seed = 0
     underloss = 'models/springunderdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
     undermodel = 'models/springunderdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth'
     underdamped = load_model(file = undermodel)
@@ -356,9 +357,6 @@ if __name__ == '__main__':
                     'v3x': deltat**3 * (-4 * gamma**2 * omega0**2 + omega0**4) * x,
                     'v4v': deltat**4 * (16 * gamma**4 - 12 * omega0**2 * gamma**2 + omega0**4) * v,
                     'v4x': deltat**4 * (2 * gamma**3 * omega0**2 - omega0**4 * gamma) * x
-
-
-
 
                     }
         #generate_targets(omega0, gamma, deltat)

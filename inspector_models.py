@@ -7,6 +7,7 @@ from util import load_model, get_hidden_state_old, get_hidden_state
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score
 from sklearn.decomposition import PCA
+from matplotlib.colors import Normalize
 import numpy as np
 import os
 
@@ -157,7 +158,8 @@ def probe_hiddenstates(model, modelname, data, multi_target_vals, target_name, l
     hs_corr = np.mean(correlations, axis=0)  # Average correlation for each hidden state
     # Plotting
     fig, ax = plt.subplots(figsize=(12, 5))
-    cax = ax.matshow(correlations, cmap='viridis')
+    norm = Normalize(vmin=0, vmax=1)  # Normalize values between 0 and 1
+    cax = ax.matshow(correlations, cmap='viridis', norm=norm)
     cbar = fig.colorbar(cax)
     labeldict = {True: 'Linear', False: 'Non Linear'}
     cbar.set_label(f'{labeldict[linear]} R^2')  # Set label for color bar
