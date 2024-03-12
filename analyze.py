@@ -260,7 +260,15 @@ def plot_neuron(model, modelname, data, targetdict, layer = 0, neuron = 0, CL = 
         plt.show()
 
 
-
+def generate_targets(omega, gamma, deltat):
+    targetdict = {}
+    for o_exp in range(5):
+        for g_exp in range(5):
+            for d_exp in range(5):
+                target = (omega**o_exp)*(gamma**g_exp)*(deltat**d_exp)
+                target_name = f'omega0^{o_exp}gamma^{g_exp}deltat^{d_exp}'
+                targetdict[target_name] = target
+    return targetdict
 
     
 
@@ -292,16 +300,20 @@ if __name__ == '__main__':
                 }
     models = {'underdamped': underdamped,
               #'3-layer underdamped': underdamped3, 
-              'overdamped':overdamped, 
-              'damped':damped}
+            #   'overdamped':overdamped, 
+            #   'damped':damped
+              }
     for modelkey in models.keys():
         key = 'damped'
         data = torch.load('data/dampedspring_data.pth')
         deltat = data[f'times_test_{key}'][:, 1] - data[f'times_test_{key}'][:, 0]
-        deltat =torch.cat((deltat, data[f'times_train_{key}'][:, 1] - data[f'times_train_{key}'][:, 0]), dim=0)
-        omega0= torch.cat((data[f'omegas_test_{key}'], data[f'omegas_train_{key}']), dim=0)
-        gamma= torch.cat((data[f'gammas_test_{key}'], data[f'gammas_train_{key}']), dim=0)
+        deltat =torch.cat((deltat, data[f'times_train_{key}'][:, 1] - data[f'times_train_{key}'][:, 0]), dim=0).unsqueeze(1)
+        omega0= torch.cat((data[f'omegas_test_{key}'], data[f'omegas_train_{key}']), dim=0).unsqueeze(1)
+        gamma= torch.cat((data[f'gammas_test_{key}'], data[f'gammas_train_{key}']), dim=0).unsqueeze(1)
         data = torch.cat((data[f'sequences_test_{key}'], data[f'sequences_train_{key}']))
+        x = data[:,:,0]
+        v = data[:,:,1]
+        #breakpoint()
 
         omega = torch.sqrt(torch.abs(omega0**2 - gamma**2))
 
@@ -316,18 +328,71 @@ if __name__ == '__main__':
                     # 'deltat':deltat,
                     # 'omega0^2deltat': omega0**2*deltat,
                     # 'gammadeltat': gamma*deltat,
-                    'omega0deltat': omega0*deltat,
-                    'omega0^2deltat^2': omega0**2*deltat**2,
-                    'gammadeltat^2': gamma*deltat**2,
-                    'gammaomega0^2deltat^2': gamma*omega0**2*deltat**2,
-                    'fourgamma^2minusomega0^2deltat^2': (4*gamma**2-omega0**2)*deltat**2,
+                    # 'omega0deltat': omega0*deltat,
+                    # 'omega0^2deltat^2': omega0**2*deltat**2,
+                    # 'gammadeltat^2': gamma*deltat**2,
+                    # 'gammaomega0^2deltat^2': gamma*omega0**2*deltat**2,
+                    # 'fourgamma^2minusomega0^2deltat^2': (4*gamma**2-omega0**2)*deltat**2,
+                    # 'x0': x0,
+                    # 'v0deltat': v0*deltat,
+                    # 'v0': v0,
+                    # 'omega0^2deltatx0': omega0**2*deltat*x0,
+                    # 'gammadeltatv0': gamma*deltat*v0,
+                    'x0x': x,
+                    'x1v': deltat * v,
+                    'x2v': deltat**2 * gamma * v,
+                    'x2x': deltat**2 * omega0**2 * x,
+                    'x3v': deltat**3 * (4 * gamma**2 - omega0**2) * v,
+                    'x3x': deltat**3 * gamma * omega0**2 * x,
+                    'x4v': deltat**4 * (-2 * gamma**3 + omega0**2 * gamma) * v,
+                    'x4x': deltat**4 * (-4 * gamma**2 * omega0**2 + omega0**4) * x,
+
+                    'v0v': v,
+                    'v1v': deltat * gamma * v,
+                    'v1x': deltat * omega0**2 * x,
+                    'v2v': deltat**2 * (4 * gamma**2 - omega0**2) * v,
+                    'v2x': deltat**2 * gamma * omega0**2 * x,
+                    'v3v': deltat**3 * (-2 * gamma**3 + omega0**2 * gamma) * v,
+                    'v3x': deltat**3 * (-4 * gamma**2 * omega0**2 + omega0**4) * x,
+                    'v4v': deltat**4 * (16 * gamma**4 - 12 * omega0**2 * gamma**2 + omega0**4) * v,
+                    'v4x': deltat**4 * (2 * gamma**3 * omega0**2 - omega0**4 * gamma) * x
+
+
+
+
                     }
+        #generate_targets(omega0, gamma, deltat)
         model = models[modelkey]
         print(modelkey)
+        #targets = []
+        avg_magsv = []
+        r2sv = []
+        avg_magsx = []
+        r2sx = []
+        layer, neuron = 2, 0
         for target_name in targetdict.keys():
-            print(target_name)
-            target_vals = targetdict[target_name]
-            probe_hiddenstates(model, modelkey, data, target_vals, target_name, linear = True, CL = 10, epochs = 20000, num_layers = 2)
+            target_vals = targetdict[target_name]#[:, neuron]
+            #breakpo
+            probe_hiddenstates(model, modelkey, data, target_vals, target_name, linear = True, CL = 10, epochs = 10000, num_layers = 2)
+            # r2 = probe_hiddenstate(model = model, modelname = modelkey, data = data, target_vals = target_vals, target_name = target_name, linear = True, CL = 10, epochs = 10000, layer = layer, neuron = neuron, plot = False)
+            # avg_mag = target_vals.abs().mean().item()
+            # print(f'{target_name}: R^2 = {r2:.3f}, Avg Mag = {avg_mag:.3e}')
+            # if target_name[0] == 'v':
+            #     avg_magsv.append(avg_mag)
+            #     r2sv.append(r2)
+            # elif target_name[0] == 'x':
+            #     avg_magsx.append(avg_mag)
+            #     r2sx.append(r2)
+            #targets.append(target_name)
+        # plt.scatter(avg_magsx, r2sx, color = 'b', label = 'x(t+dt) Taylor Expansion')
+        # plt.scatter(avg_magsv, r2sv, color = 'r', label = 'v(t+dt) Taylor Expansion')
+        # plt.title(f'{modelkey} Model\nR^2 of Linear Probe vs Avg Magnitude of Taylor Expansion Term\nlayer = {layer}, neuron = {neuron}')
+        # plt.xscale('log')
+        # plt.xlabel('Avg Magnitude of Taylor Expansion Term')
+        # plt.ylabel('R^2 of Linear Probe')
+        # plt.legend()
+        # plt.show()
+
         #plot_neuron(models[modelkey], modelkey+' Model', data, targetdict, layer = 2, neuron = 9, CL = 10)
         
     #model = load_model(file = modelpath)

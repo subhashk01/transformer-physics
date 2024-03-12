@@ -111,6 +111,7 @@ def probe_hiddenstate(model, modelname, data, target_name, target_vals, linear =
 
     # randomize hidden_states and target_vals
     indices = torch.randperm(hidden_states.shape[0])
+
     hidden_states = hidden_states[indices]
     target_vals = target_vals[indices] #TODO CHANGE BACK
     # split into test train
@@ -139,11 +140,12 @@ def probe_hiddenstate(model, modelname, data, target_name, target_vals, linear =
 
     return r_squared
 
-def probe_hiddenstates(model, modelname, data, target_vals, target_name, linear = False, CL = 10, epochs = 10000, num_layers = 2):
+def probe_hiddenstates(model, modelname, data, multi_target_vals, target_name, linear = False, CL = 10, epochs = 10000, num_layers = 2):
     correlations = []
     for layer in range(num_layers+1):
         layer_corr = []
         for neuron in range(CL):
+            target_vals = multi_target_vals[:, neuron] # comment if not needed
             print(f'Layer: {layer}, Neuron: {neuron}')
             r2 = probe_hiddenstate(model, modelname, data, layer = layer, neuron = neuron, target_vals = target_vals, target_name = target_name,  CL = CL, epochs = epochs, plot = False, linear = linear)
             print(f'R^2: {r2:.2f}')
