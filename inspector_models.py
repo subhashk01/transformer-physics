@@ -40,6 +40,19 @@ class LinearProbe(nn.Module):
         x = self.l2(x)
         return x
     
+class LinearDirect(nn.Module):
+    def __init__(self, input_size, output_size=1):
+        super().__init__()
+        self.l = nn.Linear(input_size, output_size)
+        # Initialize weights to ones
+        nn.init.constant_(self.l.weight, 1.0)
+        # Optionally, you can also initialize the bias to zeros or another value
+        nn.init.constant_(self.l.bias, 0.0)
+        
+    def forward(self, x):
+        x = self.l(x)
+        return x
+    
 class EllipseProbe(nn.Module):
     def __init__(self, poly_deg = 2):
         super().__init__()
@@ -143,43 +156,43 @@ def probe_hiddenstate(model, modelname, data, target_name, target_vals, linear =
 
 def probe_hiddenstates(model, modelname, data, multi_target_vals, target_name, linear = False, CL = 10, epochs = 10000, num_layers = 2):
     correlations = []
-    for layer in range(num_layers+1):
+    for layer in [num_layers]: #only do last layer#range(num_layers+1):
         layer_corr = []
         for neuron in range(CL):
             target_vals = multi_target_vals[:, neuron] # comment if not needed
-            print(f'Layer: {layer}, Neuron: {neuron}')
+            print(f'{target_name} Layer: {layer}, Neuron: {neuron}')
             r2 = probe_hiddenstate(model, modelname, data, layer = layer, neuron = neuron, target_vals = target_vals, target_name = target_name,  CL = CL, epochs = epochs, plot = False, linear = linear)
             print(f'R^2: {r2:.2f}')
             layer_corr.append(r2)
         correlations.append(layer_corr)
-    correlations = np.array(correlations)
+    # correlations = np.array(correlations)
 
-    layer_corr = np.mean(correlations, axis=1)  # Average correlation for each layer
-    hs_corr = np.mean(correlations, axis=0)  # Average correlation for each hidden state
-    # Plotting
-    fig, ax = plt.subplots(figsize=(12, 5))
-    norm = Normalize(vmin=0, vmax=1)  # Normalize values between 0 and 1
-    cax = ax.matshow(correlations, cmap='viridis', norm=norm)
-    cbar = fig.colorbar(cax)
-    labeldict = {True: 'Linear', False: 'Non Linear'}
-    cbar.set_label(f'{labeldict[linear]} R^2')  # Set label for color bar
+    # layer_corr = np.mean(correlations, axis=1)  # Average correlation for each layer
+    # hs_corr = np.mean(correlations, axis=0)  # Average correlation for each hidden state
+    # # Plotting
+    # fig, ax = plt.subplots(figsize=(12, 5))
+    # norm = Normalize(vmin=0, vmax=1)  # Normalize values between 0 and 1
+    # cax = ax.matshow(correlations, cmap='viridis', norm=norm)
+    # cbar = fig.colorbar(cax)
+    # labeldict = {True: 'Linear', False: 'Non Linear'}
+    # cbar.set_label(f'{labeldict[linear]} R^2')  # Set label for color bar
 
-    # Set x and y ticks manually
-    ax.set_xticks(range(correlations.shape[1]))  # Assuming you have 10 hidden states
-    ax.set_yticks(range(correlations.shape[0]))   # Assuming you have 3 layers
-    ax.set_xticklabels([f'{i}\n{hs_corr[i]:.2f}' for i in range(correlations.shape[1])])
-    ax.set_yticklabels([f'After Pos Emb\n{layer_corr[0]:.2f}']+[f'After Layer {i}\n{layer_corr[i]:.2f}' for i in range(1,correlations.shape[0])])
-    ax.set_xlabel('Hidden State')
-    #ax.set_ylabel('Layer')
+    # # Set x and y ticks manually
+    # ax.set_xticks(range(correlations.shape[1]))  # Assuming you have 10 hidden states
+    # ax.set_yticks(range(correlations.shape[0]))   # Assuming you have 3 layers
+    # ax.set_xticklabels([f'{i}\n{hs_corr[i]:.2f}' for i in range(correlations.shape[1])])
+    # ax.set_yticklabels([f'After Pos Emb\n{layer_corr[0]:.2f}']+[f'After Layer {i}\n{layer_corr[i]:.2f}' for i in range(1,correlations.shape[0])])
+    # ax.set_xlabel('Hidden State')
+    # #ax.set_ylabel('Layer')
 
-    # Add text annotations with the correlation values
-    for i in range(correlations.shape[0]):
-        for j in range(correlations.shape[1]):
-            ax.text(j, i, f'{correlations[i, j]:.2f}', ha='center', va='center', color='white')
+    # # Add text annotations with the correlation values
+    # for i in range(correlations.shape[0]):
+    #     for j in range(correlations.shape[1]):
+    #         ax.text(j, i, f'{correlations[i, j]:.2f}', ha='center', va='center', color='white')
 
-    ax.set_title(f'{modelname} Model \n R^2 of {labeldict[linear]} 2Layer NN w/ Hidden States with {target_name}\nTest on CL = {CL}, Train w/ {num_layers}Layers, 16Emb, 65CL')
-    plt.savefig(f'figures/{modelname}_{target_name}_{labeldict[linear]}_probes.png')
-    return np.array(correlations)  # Shape: [3, 10], representing overall correlation for each hidden state in each layer
+    # ax.set_title(f'{modelname} Model \n R^2 of {labeldict[linear]} 2Layer NN w/ Hidden States with {target_name}\nTest on CL = {CL}, Train w/ {num_layers}Layers, 16Emb, 65CL')
+    # plt.savefig(f'figures/{modelname}_{target_name}_{labeldict[linear]}_probes.png')
+    # return np.array(correlations)  # Shape: [3, 10], representing overall correlation for each hidden state in each layer
 
 
 
@@ -292,6 +305,9 @@ def plot_ellipse(model, layer=0, neuron=0, target='omegas', CL=10):
     plt.show()
 
 
+
+
+
 if __name__ == '__main__':
     losspath = 'models/spring_16emb_2layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
     modelpath = 'models/spring_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth'
@@ -299,4 +315,4 @@ if __name__ == '__main__':
     #check_ellipse(model, poly_deg = 1)
     #plot_ellipse(model)
     #probe_hiddenstate(model, layer = 2, neuron = 0, target = 'omegas')
-    probe_hiddenstates(model, target = 'omegas', CL = 10, epochs = 10000, num_layers = 2, linear = True)
+    #probe_hiddenstates(model, target = 'omegas', CL = 10, epochs = 10000, num_layers = 2, linear = True)

@@ -359,6 +359,33 @@ if __name__ == '__main__':
                     'v4x': deltat**4 * (2 * gamma**3 * omega0**2 - omega0**4 * gamma) * x
 
                     }
+        tsize = targetdict['x0x'].size()
+        targetdictnovar = {
+                    'x1v': deltat.repeat(1, tsize[1]),
+                    'x2v': (deltat**2 * gamma).repeat(1, tsize[1]),
+                    'x2x': (deltat**2 * omega0**2).repeat(1, tsize[1]),
+                    'x3v': (deltat**3 * (4 * gamma**2 - omega0**2)).repeat(1, tsize[1]),
+                    'x3x': (deltat**3 * gamma * omega0**2).repeat(1, tsize[1]),
+                    'x4v': (deltat**4 * (-2 * gamma**3 + omega0**2 * gamma)).repeat(1, tsize[1]),
+                    'x4x': (deltat**4 * (-4 * gamma**2 * omega0**2 + omega0**4)).repeat(1, tsize[1]),
+
+                    'v1v': (deltat * gamma).repeat(1, tsize[1]),
+                    'v1x': (deltat * omega0**2).repeat(1, tsize[1]),
+                    'v2v': (deltat**2 * (4 * gamma**2 - omega0**2)).repeat(1, tsize[1]),
+                    'v2x': (deltat**2 * gamma * omega0**2).repeat(1, tsize[1]),
+                    'v3v': (deltat**3 * (-2 * gamma**3 + omega0**2 * gamma)).repeat(1, tsize[1]),
+                    'v3x': (deltat**3 * (-4 * gamma**2 * omega0**2 + omega0**4)).repeat(1, tsize[1]),
+                    'v4v': (deltat**4 * (16 * gamma**4 - 12 * omega0**2 * gamma**2 + omega0**4)).repeat(1, tsize[1]),
+                    'v4x': (deltat**4 * (2 * gamma**3 * omega0**2 - omega0**4 * gamma)).repeat(1, tsize[1])
+
+        }
+
+        # save targetdict
+        torch.save(targetdict, f'euler_terms_{modelkey}.pth')
+        torch.save(targetdictnovar, f'euler_termsnovar_{modelkey}.pth')
+    
+        # save target_dict
+
         #generate_targets(omega0, gamma, deltat)
         model = models[modelkey]
         print(modelkey)
@@ -371,7 +398,7 @@ if __name__ == '__main__':
         for target_name in targetdict.keys():
             target_vals = targetdict[target_name]#[:, neuron]
             #breakpo
-            probe_hiddenstates(model, modelkey, data, target_vals, target_name, linear = True, CL = 10, epochs = 10000, num_layers = 2)
+            probe_hiddenstates(model, modelkey, data, target_vals, target_name, linear = True, CL = 65, epochs = 20000, num_layers = 2)
             # r2 = probe_hiddenstate(model = model, modelname = modelkey, data = data, target_vals = target_vals, target_name = target_name, linear = True, CL = 10, epochs = 10000, layer = layer, neuron = neuron, plot = False)
             # avg_mag = target_vals.abs().mean().item()
             # print(f'{target_name}: R^2 = {r2:.3f}, Avg Mag = {avg_mag:.3e}')

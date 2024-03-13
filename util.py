@@ -66,3 +66,43 @@ def get_hidden_state(model, data, CL, layer = 0, neuron = 0):
     hidden_states = hidden_states[:, layer, neuron, :]
 
     return hidden_states
+
+def euler_to_term(novar = False):
+    mapping = {'x0x': 'x',
+               'x1v': '\Delta t v',
+               'x2v': '\Delta t^2 \gamma v',
+               'x2x': '\Delta t^2 \omega_0^2 x',
+               'x3v': '\Delta t^3 (4\gamma^2 - \omega_0^2) v',
+               'x3x': '\Delta t^3 \gamma \omega_0^2 x',
+               'x4v': '\Delta t^4 (-2 \gamma^3 + \omega_0^2 \gamma) v',
+               'x4x': '\Delta t^4 (-4 \gamma^2 \omega_0^2 + \omega_0^4) x',
+               'v0v': 'v',
+               'v1v': '\Delta t \gamma v',
+               'v1x': '\Delta t \omega_0^2 x',
+               'v2v': '\Delta t^2 (4 \gamma^2 - \omega_0^2) v',
+               'v2x': '\Delta t^2 \gamma \omega_0^2 x',
+               'v3v': '\Delta t^3 (-2 \gamma^3 + \omega_0^2 \gamma) v',
+               'v3x': '\Delta t^3 (-4 \gamma^2 \omega_0^2 + \omega_0^4) x',
+               'v4v': '\Delta t^4 (16 \gamma^4 - 12 \omega_0^2 \gamma^2 + \omega_0^4) v',
+               'v4x': '\Delta t^4 (2 \gamma^2 \omega_0^2 - \omega_0^4 \gamma) x'}
+    mappingnovar =  {
+               'x1v': '\Delta t',
+               'x2v': '\Delta t^2 \gamma',
+               'x2x': '\Delta t^2 \omega_0^2',
+               'x3v': '\Delta t^3 (4\gamma^2 - \omega_0^2)',
+               'x3x': '\Delta t^3 \gamma \omega_0^2',
+               'x4v': '\Delta t^4 (-2 \gamma^3 + \omega_0^2 \gamma)',
+               'x4x': '\Delta t^4 (-4 \gamma^2 \omega_0^2 + \omega_0^4)',
+
+               'v1v': '\Delta t \gamma',
+               'v1x': '\Delta t \omega_0^2',
+               'v2v': '\Delta t^2 (4 \gamma^2 - \omega_0^2)',
+               'v2x': '\Delta t^2 \gamma \omega_0^2',
+               'v3v': '\Delta t^3 (-2 \gamma^3 + \omega_0^2 \gamma)',
+               'v3x': '\Delta t^3 (-4 \gamma^2 \omega_0^2 + \omega_0^4)',
+               'v4v': '\Delta t^4 (16 \gamma^4 - 12 \omega_0^2 \gamma^2 + \omega_0^4)',
+               'v4x': '\Delta t^4 (2 \gamma^2 \omega_0^2 - \omega_0^4 \gamma)'}
+    if novar:
+        return mappingnovar
+    else:
+        return mapping

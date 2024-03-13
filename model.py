@@ -58,6 +58,29 @@ class CausalSelfAttention(nn.Module):
 
         return y
     
+    def get_attn(self, x):
+        B, T, C = x.size() # B is batch size, T is sequence length, C is embedding dimensions 
+        assert C == self.n_embd, f"Input embedding dimensions {C} does not match the model embedding dimensions {self.n_embd}"
+        # B sentences, each sentence has T words, each word is represented in C dimensions
+        x_proj = self.c_attn(x) # This will make up the Q, K, V matrix. Sends x to 3x dimensions for each matri
+        q, k, v = x_proj[ : , : , :C ], x_proj[ : , : , C:2*C ], x_proj[ : , : , 2*C:3*C ] # split the 3x dimensions into Q, K, V. all same size as x
+        
+        n_head = self.n_head
+        # split up into n_head attention heads. each will be applied on a different part of the input
+        q = q.reshape(B, n_head, T, int(C/n_head)) # (B, nh, T, hs)
+        k = k.reshape(B, n_head, T, int(C/n_head))
+        v = v.reshape(B, n_head, T, int(C/n_head))
+
+        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1))) # (B, nh, T, T). doing sig(q_i*k_j)/sqrt(len(k)) to find s_ij (NLP notes)
+
+        mask = torch.ones(T,T)*float('-inf')
+        mask = torch.triu(mask, diagonal=1) #can't look ahead. in first word can only look at first word. not ahead
+        mask = mask.repeat(B, n_head, 1, 1)
+        att = att + mask
+        att = F.softmax(att, dim=-1)
+        return att
+    
+    
 class Block(nn.Module):
     # a block is a transformer block. It has a self attention layer, a feed forward layer, and a layer norm
     def __init__(self, config):
@@ -84,6 +107,11 @@ class Block(nn.Module):
             x = x + self.mlpf(self.ln2(x))
         x = x + self.mlpf(x)
         return x
+    
+    def get_attn(self, x, layernorm = False):
+        if layernorm:
+            x = self.ln1(x)
+        return self.attn.get_attn(x)
 
 class Transformer(nn.Module):
     def __init__(self, config):
@@ -150,6 +178,30 @@ class Transformer(nn.Module):
             x = self.ln_f(x)
         y = self.l_out(x)
         return y, hidden_states
+    
+    def return_attns(self, x, layernorm = False):
+        # Add positional embeddings
+        seq_length = x.size(1)
+        positions = torch.arange(0, seq_length, dtype=torch.long, device=x.device)
+        if seq_length > self.max_seq_length:
+            # add extra zeroes to positional embeddings
+            diff = seq_length - self.max_seq_length
+            extra_pos = torch.zeros(diff, self.n_embed, device=x.device)
+            pos_embeddings = torch.cat((self.positional_embeddings, extra_pos), dim=0)
+            
+        pos_embeddings = self.positional_embeddings[positions]
+
+        x = self.l_in(x)
+        x = x + pos_embeddings  # Add positional embeddings to input embeddings
+
+        attns = []
+
+        for i in range(self.n_layer):
+            x = self.blocks[i](x, layernorm)
+            attns.append(self.blocks[i].get_attn(x, layernorm))
+        attns = torch.stack(attns)
+        return attns
+    
         
 
 
@@ -162,9 +214,11 @@ if __name__ == "__main__":
     #linspace between -100 and 100
     torch.manual_seed(0)
     config = get_default_config()
+    config.n_embd = 16
     attn = CausalSelfAttention(config)
-    x = torch.randn(1, 10, 16)
-    y = attn(x)
+    model = Transformer(config)
+    x = torch.rand(15000,10,2)
+    y = model.return_attns(x)
     print(y.shape)
 
     
