@@ -106,8 +106,9 @@ def test_ICL(models, evaluate):
             MSEs = []
             CLs = []
             for CL in range(1,65):
-                evaluate_data = evaluate[evaluate_key][:100, :CL+1, :]
-                X, y = evaluate_data[:,:-1,:],evaluate_data[:,1:,:]
+                print(CL)
+                evaluate_data = evaluate[evaluate_key][:, :CL+1, :]
+                X, y = evaluate_data[:100,:-1,:],evaluate_data[:100,1:,:]
                 with torch.no_grad():
                     y_pred = model(X)
                     MSE = criterion(y_pred, y)
@@ -270,53 +271,40 @@ def generate_targets(omega, gamma, deltat):
                 targetdict[target_name] = target
     return targetdict
 
-    
 
-
-if __name__ == '__main__':
-    set_seed = 0
-    underloss = 'models/springunderdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
-    undermodel = 'models/springunderdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth'
-    underdamped = load_model(file = undermodel)
-
-    overloss = 'models/springoverdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
-    overmodel = 'models/springoverdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth'
-    overdamped = load_model(file = overmodel)
-
-    dampedloss = 'models/springdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
-    dampedmodel = 'models/springdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth'
-    damped = load_model(file = dampedmodel)
-    
-    config.n_layer = 3
-    under3loss = 'models/springunderdamped_16emb_3layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
-    under3model = 'models/springunderdamped_16emb_3layer_65CL_20000epochs_0.001lr_64batch_model.pth'
-    underdamped3 = load_model(file = under3model, config = config)
-    #plot_loss_curves(file = under3loss)
-    losspaths = [underloss, overloss, dampedloss, under3loss]
-    # for losspath in losspaths:
-    #     plot_loss_curves(file = losspath)
-    data = torch.load('data/dampedspring_data.pth')
-    evaluate = {'underdamped': data['sequences_test_underdamped'], 
-                'overdamped': data['sequences_test_overdamped'],
-                }
-    models = {'underdamped': underdamped,
-              #'3-layer underdamped': underdamped3, 
-            #   'overdamped':overdamped, 
-            #   'damped':damped
-              }
+def create_probes(models):
     for modelkey in models.keys():
-        key = 'damped'
+        key = 'underdamped'
         data = torch.load('data/dampedspring_data.pth')
         deltat = data[f'times_test_{key}'][:, 1] - data[f'times_test_{key}'][:, 0]
         deltat =torch.cat((deltat, data[f'times_train_{key}'][:, 1] - data[f'times_train_{key}'][:, 0]), dim=0).unsqueeze(1)
         omega0= torch.cat((data[f'omegas_test_{key}'], data[f'omegas_train_{key}']), dim=0).unsqueeze(1)
         gamma= torch.cat((data[f'gammas_test_{key}'], data[f'gammas_train_{key}']), dim=0).unsqueeze(1)
+        omegas = torch.sqrt(omega0**2 - gamma**2)
         data = torch.cat((data[f'sequences_test_{key}'], data[f'sequences_train_{key}']))
         x = data[:,:,0]
         v = data[:,:,1]
+
+        prefactor = torch.exp(-gamma*deltat)
+        beta = - (gamma**2 + omegas**2)/omegas
+        cos = torch.cos(omegas*deltat)
+        sin = torch.sin(omegas*deltat)
+        w00 = (cos + gamma/omegas*sin) * prefactor
+        w01 = (sin/omegas) * prefactor
+        w10 = (beta * sin) * prefactor
+        w11 = (cos - gamma/omegas*sin) * prefactor
+        # prefactor = torch.exp(-gamma*deltat)
+        # beta = - (gammas**2 + omegas**2)/omegas
+        # cos = torch.cos(omegas*deltat)
+        # sin = torch.sin(omegas*deltat)
+        # w00 = cos + gammas/omegas*sin
+        # w01 = sin/omegas
+        # w10 = beta * sin
+        # w11 = cos - gammas/omegas*sin
+        # terms = [w00, w01, w10, w11]
+
         #breakpoint()
 
-        omega = torch.sqrt(torch.abs(omega0**2 - gamma**2))
 
         targetdict = {
                     # 'omega0':omega0, 
@@ -380,9 +368,17 @@ if __name__ == '__main__':
 
         }
 
+        matrixtarget = {
+                    'w00': w00 * x,
+                    'w01': w01 * v,
+                    'w10': w10 * x,
+                    'w11': w11 * v
+        }
+
         # save targetdict
         torch.save(targetdict, f'euler_terms_{modelkey}.pth')
         torch.save(targetdictnovar, f'euler_termsnovar_{modelkey}.pth')
+        torch.save(matrixtarget, f'matrix_terms_{modelkey}.pth')
     
         # save target_dict
 
@@ -395,10 +391,48 @@ if __name__ == '__main__':
         avg_magsx = []
         r2sx = []
         layer, neuron = 2, 0
-        for target_name in targetdict.keys():
-            target_vals = targetdict[target_name]#[:, neuron]
-            #breakpo
+        lookat = matrixtarget
+        for target_name in lookat.keys():
+            target_vals = lookat[target_name]#[:, neuron]
             probe_hiddenstates(model, modelkey, data, target_vals, target_name, linear = True, CL = 65, epochs = 20000, num_layers = 2)
+    
+
+
+if __name__ == '__main__':
+    set_seed = 0
+    underloss = 'models/springunderdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
+    undermodel = 'models/springunderdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth'
+    underdamped = load_model(file = undermodel)
+
+    overloss = 'models/springoverdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
+    overmodel = 'models/springoverdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth'
+    overdamped = load_model(file = overmodel)
+
+    dampedloss = 'models/springdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
+    dampedmodel = 'models/springdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth'
+    damped = load_model(file = dampedmodel)
+    
+    config.n_layer = 3
+    under3loss = 'models/springunderdamped_16emb_3layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
+    under3model = 'models/springunderdamped_16emb_3layer_65CL_20000epochs_0.001lr_64batch_model.pth'
+    underdamped3 = load_model(file = under3model, config = config)
+    #plot_loss_curves(file = under3loss)
+    losspaths = [underloss, overloss, dampedloss, under3loss]
+    # for losspath in losspaths:
+    #     plot_loss_curves(file = losspath)
+    data = torch.load('data/dampedspring_data.pth')
+    evaluate = {'underdamped': data['sequences_test_underdamped'], 
+                'overdamped': data['sequences_test_overdamped'],
+                }
+    models = {'underdamped': underdamped,
+              #'3-layer underdamped': underdamped3, 
+            #   'overdamped':overdamped, 
+            #   'damped':damped
+              }
+    #test_ICL(models, evaluate)
+    create_probes(models)
+
+    
             # r2 = probe_hiddenstate(model = model, modelname = modelkey, data = data, target_vals = target_vals, target_name = target_name, linear = True, CL = 10, epochs = 10000, layer = layer, neuron = neuron, plot = False)
             # avg_mag = target_vals.abs().mean().item()
             # print(f'{target_name}: R^2 = {r2:.3f}, Avg Mag = {avg_mag:.3e}')

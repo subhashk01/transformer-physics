@@ -180,6 +180,7 @@ def probetargets(modeltype = 'underdamped',CL = 65, layer = 2, plot = False):
     torch.save(predicteddict, savestr+'.pth')
 
 def plot_R2_firsths_euler(modeltype = 'underdamped'):
+
     plt.rcParams['text.usetex'] = True
     layer, neuron = 2,0
     data = torch.load('data/dampedspring_data.pth')
@@ -240,6 +241,13 @@ def plot_R2evolve_euler(modeltype = 'underdamped',CL = 65, layer = 2, R2 = True,
     norm = LogNorm(vmin=1e-5, vmax=1e0)
     str = '$R^2$' if R2 else 'MSE'
     criterion = torch.nn.MSELoss()
+
+    altdata = data[:,:CL+1,:]
+    _, hidden_states = model.forward_hs(altdata[:,:-1,:])
+    hidden_states = torch.stack(hidden_states)
+    hidden_states = hidden_states.transpose(0, 1)
+
+
     for e, euler_target in enumerate(['x','v']):
         fig, axs = plt.subplots(5,2, sharey = R2, sharex = R2, figsize = (10,10))
         term_num = 0
@@ -250,13 +258,13 @@ def plot_R2evolve_euler(modeltype = 'underdamped',CL = 65, layer = 2, R2 = True,
             if col_num==0:
                 ax.set_ylabel(rf'Order {row_num} Terms\\{str}')
             if row_num == axs.shape[0]-1:
-                ax.set_xlabel('Neuron Number')
+                ax.set_xlabel('Context Length')
             if row_num == 0:
                 if col_num == 0:
                     ax.set_title(rf'$x$ terms in Taylor Expansion of ${euler_target}(t+dt)$')
                 else:
                     ax.set_title(rf'$v$ terms in Taylor Expansion of ${euler_target}(t+dt)$')
-            neurons = list(range(10))
+            neurons = list(range(CL))
             R2s = []
             avg_mags = []
             MSEs = []
@@ -265,7 +273,8 @@ def plot_R2evolve_euler(modeltype = 'underdamped',CL = 65, layer = 2, R2 = True,
                     target = target_dict[targetname][:,neuron]
                 else:
                     continue
-                hs = get_hidden_state(model, data, CL = neuron+1, layer = layer, neuron = neuron)
+                #hs = get_hidden_state(model, data, CL = neuron+1, layer = layer, neuron = neuron)
+                hs = hidden_states[:, layer, neuron, :]
                 probe = LinearProbe(hs.shape[1])
                 probepath = f'probes/{modeltype}/{targetname}_layer{layer}_neuron{neuron}_Linear_probe.pth'
                 probe.load_state_dict(torch.load(probepath))
@@ -275,11 +284,12 @@ def plot_R2evolve_euler(modeltype = 'underdamped',CL = 65, layer = 2, R2 = True,
                 avg_mags.append(target.abs().mean())
                 mse = criterion(target_pred, target).detach()
                 MSEs.append(mse)
+                print(f'{targetname}: Neuron {neuron}, MSE = {mse:.2e}, R^2 = {r2:.2f}')
             
             if len(R2s):
                 print(targetname, row_num, col_num)
                 R2s = [max(0,r2) for r2 in R2s]
-                metric = R2 if R2 else MSEs
+                metric = R2s if R2 else MSEs
                 ax.plot(neurons, metric, color = colors[e], marker = 'o', label = rf'${targetname}:{mapping[targetname]}$\\Avg Mag = {target.abs().mean().item():.2e}')
 
                 #scatter = ax.scatter(neurons, R2s, c=avg_mags, cmap=cm.viridis, norm=norm, marker='o', label=targetname)
@@ -296,6 +306,7 @@ def plot_R2evolve_euler(modeltype = 'underdamped',CL = 65, layer = 2, R2 = True,
         # cbar.set_label('Average Magnitude (log scale)')
         plt.subplots_adjust(wspace=0, hspace=0)
         plt.show()
+        
         
 def plot_R2euler_datatypes(targetname='x0x', layer=2, neuron=0, modeltype='underdamped', CL=65):
     plt.rcParams['text.usetex'] = True
@@ -442,63 +453,172 @@ def predict_neuron_euler(layer=2, neuron=0, target='x', modeltype='underdamped',
             epoch_pbar.set_postfix({'Train Loss': loss.item(), 'Test Loss': test_loss.item(), 'R^2 Train': r2_train, 'R^2 Test': r2_test})
         
 
-        torch.save(best_probe, f'probes/eulerlinear_{target}target_{modeltype}_layer{layer}_neuron{neuron}_Linear_probe.pth')
+        torch.save(best_probe, f'probes/eulerlinear/eulerlinear_{target}target_{modeltype}_layer{layer}_neuron{neuron}_Linear_probe.pth')
         best_weights = probe.l.weight.squeeze()
         for i, targetname in enumerate(targetnames):
             print(f'{targetname}: {best_weights[i].item():.2f}')
     return best_MSE, best_R2, best_weights, MSE_probe_actual_best, MSE_model_actual
 
-def compare_euler_model(run = True, modeltype = 'underdamped', num_neurons = 10):
-    # THEORY: if euler was well approximating the model and not just data,
-    # we expect MSE(model, euler) < MSE(euler, data), MSE(model, data)
-    neurons = list(range(num_neurons))
+def predict_allneurons_euler(layer = 2, CL = 65, target='x', modeltype='underdamped', epochs=100000, lr=1e-3):
+    neurons = list(range(CL))
     model = load_model(f'models/spring{modeltype}_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth')
     model.eval()
 
     data = torch.load('data/dampedspring_data.pth')
-    data = torch.cat((data[f'sequences_test_damped'], data[f'sequences_train_damped']))[:, :num_neurons + 2, :]
-    outputs = model(data[:,:num_neurons+1, :])
+    data = torch.cat((data[f'sequences_test_damped'], data[f'sequences_train_damped']))
+    # we want to take only the first CL+1 timesteps
+    # randomize first dimension of data
+    indices = torch.randperm(data.shape[0])
+    data = data[indices]
+    data = data[:5000,:CL+1,:]
+    X = data[:,:-1,:]
+    _, targetnames = eulermapping_data(0, target)
+
+    _, hidden_states = model.forward_hs(X)
+    hidden_states = torch.stack(hidden_states)
+    hidden_states = hidden_states.transpose(0, 1)
+
+    all_inputs = []
+    y_targets = []
+    ind = {'x': 0, 'v': 1}
+    for neuron in neurons:
+        inputs = []
+        for targetname in targetnames:
+            hs = hidden_states[:, layer, neuron, :]
+            probe = LinearProbe(hs.shape[1])
+            probepath = f'probes/{modeltype}/{targetname}_layer{layer}_neuron{neuron}_Linear_probe.pth'
+            probe.load_state_dict(torch.load(probepath))
+            input = probe(hs).squeeze()
+            inputs.append(input)
+        inputs = torch.stack(inputs, dim = 1)
+        all_inputs.append(inputs)
+        y_targets.append(data[:,neuron+1, ind[target]])
+    all_inputs = torch.stack(all_inputs)
+    y_targets = torch.stack(y_targets)
     
-    
+    # collaps first two dims of all_inputs into one
+    all_inputs = all_inputs.view(all_inputs.shape[0]*all_inputs.shape[1], all_inputs.shape[2])
+    y_targets = y_targets.view(y_targets.shape[0]*y_targets.shape[1])
+    # Randomize the order of the inputs
+    indices = torch.randperm(all_inputs.shape[0])
+    all_inputs = all_inputs[indices]
+    y_targets = y_targets[indices]
+    div = int(0.8 * all_inputs.shape[0])
+    Xtrain = all_inputs[:div].detach()
+    ytrain = y_targets[:div].detach()
+    Xtest = all_inputs[div:].detach()
+    ytest = y_targets[div:].detach()
+
+    probe = LinearDirect(Xtrain.shape[1])
+    epoch_pbar = tqdm(range(epochs), desc='Training Probe')
+
+    optimizer = optim.Adam(probe.parameters(), lr=lr)
+    lambda_l1 = 1e-7  # Regularization strength
+    criterion = nn.MSELoss()
+
+    for _ in epoch_pbar:
+        probe.train()
+        optimizer.zero_grad()
+        ytrain_pred = probe(Xtrain)
+        loss = criterion(ytrain_pred.squeeze(), ytrain)
+
+        # Add L1 regularization
+        l1_reg = 0
+        for param in probe.parameters():
+            l1_reg += param.abs().sum()
+        loss += lambda_l1 * l1_reg
+
+        loss.backward()
+        optimizer.step()
+        with torch.no_grad():
+            probe.eval()
+            ytest_pred = probe(Xtest)
+            test_loss = criterion(ytest_pred.squeeze(), ytest)
+            r2_test = r2_score(ytest.detach().numpy(), ytest_pred.detach().numpy())
+        epoch_pbar.set_postfix({'Train Loss': loss.item(), 'Test Loss': test_loss.item(),'R^2 Test': r2_test})
+
+    torch.save(probe.state_dict(), f'probes/eulerlinear/eulerlinear_{target}target_{modeltype}_layer{layer}_allneurons_Linear_probe.pth')
+    for i, targetname in enumerate(targetnames):
+        print(f'{targetname}: {probe.l.weight.squeeze()[i].item():.2f}')
+
+
+def compare_euler_model(run = True, modeltype = 'underdamped', CL = 65):
+    # THEORY: if euler was well approximating the model and not just data,
+    # we expect MSE(model, euler) < MSE(euler, data), MSE(model, data)
+    neurons = list(range(CL))
+    model = load_model(f'models/spring{modeltype}_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth')
+    model.eval()
+
+    data = torch.load('data/dampedspring_data.pth')
+    data = torch.cat((data[f'sequences_test_damped'], data[f'sequences_train_damped']))
+    # we want to take only the first CL+1 timesteps
+    data = data[:100,:CL+1,:]
+    X, y = data[:,:-1,:], data[:,1:,:]
+    y_model = model(X)
+
     ind = {'x': 0, 'v': 1}
     criterion = nn.MSELoss()
+
+    _, hidden_states = model.forward_hs(X)
+    hidden_states = torch.stack(hidden_states)
+    hidden_states = hidden_states.transpose(0, 1)
+
+    layer = 2
     for target in ['x', 'v']:
-        r2s = []
         MSEs_probe_model = []
         MSEs_probe_actual = []
         MSEs_model_actual = []
+        eulerprobe_outputs = []
         for neuron in neurons:
             print(target, neuron)
             if run:
                 MSE_probe_model, r2, _, MSE_probe_actual, MSE_model_actual = predict_neuron_euler(target = target, neuron = neuron, epochs = 10000)
             else:
-                inputs, _ = eulermapping_data(neuron = neuron, target = target)
+                hs = hidden_states[:, layer, neuron, :]
+                _, targetnames = eulermapping_data(neuron = neuron, target = target)
+                inputs = []
+                for targetname in targetnames:
+                    probe = LinearProbe(hs.shape[1])
+                    probepath = f'probes/{modeltype}/{targetname}_layer{layer}_neuron{neuron}_Linear_probe.pth'
+                    probe.load_state_dict(torch.load(probepath))
+                    input = probe(hs).squeeze()
+                    inputs.append(input)
+                inputs = torch.stack(inputs, dim = 1).detach()
 
-                output = outputs[:, neuron, ind[target]]
-                r2 = r2_score(output.detach().numpy(), inputs[:,0].detach().numpy())
-                print(f'{r2:.2f}')
-                real_output = data[:,neuron+1, ind[target]]
-                straight_euler = torch.sum(inputs, dim = 1)
-                straight_euler = inputs[:,0]+1.1*inputs[:,1]
-                MSE_probe_model = criterion(output, straight_euler).detach()
-                MSE_probe_actual = criterion(straight_euler, real_output).detach()
-                MSE_model_actual = criterion(output, real_output).detach()
+                eulerprobe = LinearDirect(inputs.shape[1])
+                #eulerprobepath = f'probes/eulerlinear/eulerlinear_{target}target_{modeltype}_layer{layer}_neuron{neuron}_Linear_probe.pth'
+                eulerprobepath = f'probes/eulerlinear/eulerlinear_{target}target_{modeltype}_layer{layer}_allneurons_Linear_probe.pth'
+                eulerprobe.load_state_dict(torch.load(eulerprobepath))
+                eulerprobe_output = eulerprobe(inputs).squeeze().detach()
+                eulerprobe_outputs.append(eulerprobe_output)
+                eulerprobe_stack = torch.stack(eulerprobe_outputs).transpose(0,1).detach()
 
-            MSEs_probe_model.append(MSE_probe_model)
-            MSEs_probe_actual.append(MSE_probe_actual)
-            MSEs_model_actual.append(MSE_model_actual)
-            r2s.append(r2s)
-        plt.figure(figsize = (7,7))
-        plt.plot(neurons, MSEs_probe_model, color = 'b',marker = 'o', label = 'MSE(euler probe, transformer)')
-        plt.plot(neurons, MSEs_probe_actual, color = 'r', marker = 'o', label = 'MSE(euler probe, actual data)')
-        plt.plot(neurons, MSEs_model_actual, color = 'g', marker = 'o', label = 'MSE(transformer, actual data)')
-        plt.title(f'Euler Probe Approximation of Model vs Data for {target}')
+                # reverse dims of eulerprobe
+
+
+                
+                y_model_neuron = y_model[:, :neuron+1, ind[target]].detach()
+                y_neuron = y[:, :neuron+1, ind[target]].detach()
+
+                MSE_model_actual = criterion(y_model_neuron, y_neuron)
+                MSE_probe_model = criterion(eulerprobe_stack, y_model_neuron)
+                MSE_probe_actual = criterion(eulerprobe_stack, y_neuron)
+                MSEs_model_actual.append(MSE_model_actual)
+                MSEs_probe_model.append(MSE_probe_model)
+                MSEs_probe_actual.append(MSE_probe_actual)
+
+        CLs = [neuron+1 for neuron in neurons]
+        plt.plot(CLs, MSEs_probe_model, label = 'MSE(euler probe, transformer)', color = 'r', marker = 'o')
+        plt.plot(CLs, MSEs_probe_actual, label = 'MSE(euler probe, actual data)', color = 'b', marker = 'o')
+        plt.plot(CLs, MSEs_model_actual, label = 'MSE(transformer, actual data)', color = 'g', marker = 'o')
+        
         plt.legend()
-        plt.ylabel('MSE')
+        plt.title(f'MSE of {modeltype} Models Predicting {target}')
+        plt.xlabel('CL')
+        plt.xscale('log')
         plt.yscale('log')
-        plt.xlabel('Neuron')
-        plt.savefig(f'figures/euler_model_comparison_{target}_{num_neurons}CL.png')
-        #plt.show()
+        plt.ylabel('MSE')
+        plt.show()
 
 
 def check_out_modelattention(modeltype = 'underdamped'):
@@ -534,6 +654,41 @@ def plot_attention_maps(modeltype='underdamped', CL=10):
         plt.show()
 
 
+def matrix_formulation():
+    key = 'underdamped'
+    data = torch.load('data/dampedspring_data.pth')
+    gammas = data[f'gammas_test_{key}']
+    omegas0 = data[f'omegas_test_{key}']
+    omegas = torch.sqrt(omegas0**2 - gammas**2)
+    sequences = data[f'sequences_test_{key}']
+    times = data[f'times_test_{key}']
+    deltat = times[:,1] - times[:,0]
+    # w00 = (cos + gamma/omegas*sin) * prefactor
+        # w01 = (sin/omegas) * prefactor
+        # w10 = (beta * sin) * prefactor
+        # w11 = (cos - gamma/omegas*sin) * prefactor
+    prefactor = torch.exp(-gammas*deltat)
+    beta = - (gammas**2 + omegas**2)/omegas
+    cos = torch.cos(omegas*deltat)
+    sin = torch.sin(omegas*deltat)
+    w00 = cos + gammas/omegas*sin
+    w01 = sin/omegas
+    w10 = beta * sin
+    w11 = cos - gammas/omegas*sin
+    terms = [w00, w01, w10, w11]
+    matrix = torch.zeros((sequences.shape[0], 2, 2))
+    for i in range(2):
+        for j in range(2):
+            matrix[:, i,j] = terms[i*2+j] * prefactor
+    X,y = sequences[:,:-1, :], sequences[:, 1:, :]
+    matrix = matrix.unsqueeze(1).repeat(1, X.shape[1], 1, 1) 
+    pred = torch.einsum('btik,btk->bti', matrix, X)
+    criterion = torch.nn.MSELoss()
+    loss = criterion(pred, y)
+
+
+
+    
 
 
 if __name__ == '__main__':
@@ -544,17 +699,21 @@ if __name__ == '__main__':
     sequences = data['sequences_test_damped']
     times = data['times_test_damped']
     deltat = times[:,1] - times[:,0]
+    matrix_formulation()
     #eulers_method(sequences, omegas, gammas, deltat, order = 2)
     #compare_transformer_euler(order =  2)
     #probetargets(plot = True)
     #plot_R2_firsths_euler()
+    #plot_R2evolve_euler(R2 = False, CL = 65)
     #plot_R2evolve_euler()
     #linear_eulermapping()
     #plot_R2evolve_euler(R2 = False, novar = False)
-    compare_euler_model(run = True, num_neurons = 10)
+    #compare_euler_model(run = False, CL = 65)
+    
+    #predict_allneurons_euler(target = 'v', epochs = 20000)
     #predict_neuron_euler()
     #plot_attention_maps()
-    
+    #plot_attention_maps(modeltype='', CL=10)
 
 
     # for targetname in ['x3x']:#['x0x','x1v','x2x','x2v','x3x','x3v','x4x','x4v']:

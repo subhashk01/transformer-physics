@@ -143,7 +143,9 @@ def probe_hiddenstate(model, modelname, data, target_name, target_vals, linear =
     if not os.path.exists(f'probes/{modelname}'):
         os.makedirs(f'probes/{modelname}')
     # save inspector model
-    torch.save(inspector.state_dict(), f'probes/{modelname}/{target_name}_layer{layer}_neuron{neuron}_{linear_name[linear]}_probe.pth')
+    savepath =  f'probes/{modelname}/{target_name}_layer{layer}_neuron{neuron}_{linear_name[linear]}_probe.pth'
+    torch.save(inspector.state_dict(), savepath)
+    #print('saved probe', savepath)
     if plot:
         plt.scatter(target_vals, target_pred, color = 'b')
         plt.title(f'2Layer NN Predictor of {target_name} from Hidden State\nLayer = {layer}, Neuron = {neuron}\nR^2: {r_squared:.2f}. Train Loss = {train_loss:.2e}, Test Loss = {test_loss:.2e}')
