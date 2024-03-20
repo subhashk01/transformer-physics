@@ -59,12 +59,16 @@ def get_hidden_state_old(model, CL, layer = 0, neuron = 0, target = 'omegas'):
     return hidden_states, target_vals
 
 def get_hidden_state(model, data, CL, layer = 0, neuron = 0):
+    hidden_states = get_hidden_states(model, data, CL, layer)
+    hidden_states = hidden_states[:, layer, neuron, :]
+
+    return hidden_states
+
+def get_hidden_states(model, data, CL):
     altdata = data[:,:CL+1,:]
     _, hidden_states = model.forward_hs(altdata[:,:-1,:])
     hidden_states = torch.stack(hidden_states)
     hidden_states = hidden_states.transpose(0, 1)
-    hidden_states = hidden_states[:, layer, neuron, :]
-
     return hidden_states
 
 def euler_to_term(novar = False):

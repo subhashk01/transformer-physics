@@ -6,7 +6,7 @@ import numpy as np
 from util import load_model
 import matplotlib.pyplot as plt
 from inspector_models import LinearProbe, LinearDirect
-from util import get_hidden_state, euler_to_term
+from util import get_hidden_state, get_hidden_states, euler_to_term
 from sklearn.metrics import r2_score
 from matplotlib.colors import LogNorm
 import matplotlib.cm as cm
@@ -179,15 +179,12 @@ def probetargets(modeltype = 'underdamped',CL = 65, layer = 2, plot = False):
         
     torch.save(predicteddict, savestr+'.pth')
 
-def plot_R2_firsths_euler(modeltype = 'underdamped'):
-
+def plot_R2_firsths_euler(modeltype = 'underdamped', dataset = 'underdamped', layer = 2, neuron = 10):
     plt.rcParams['text.usetex'] = True
-    layer, neuron = 2,0
-    data = torch.load('data/dampedspring_data.pth')
-    data = torch.cat((data[f'sequences_test_damped'], data[f'sequences_train_damped']))
     model = load_model(f'models/spring{modeltype}_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth')
     model.eval()
-    target_dict = torch.load('euler_terms_underdamped.pth')
+    target_dict = torch.load(f'data/euler_terms_{dataset}.pth')
+    sequences = target_dict['sequences']
     colors = 'brgcmyk'
     plt.figure(figsize = (10,5))
     for e, euler_target in enumerate(['x','v']):
@@ -199,11 +196,12 @@ def plot_R2_firsths_euler(modeltype = 'underdamped'):
                 target = target_dict[targetname][:,neuron]
             else:
                 continue
-            hs = get_hidden_state(model, data, CL = 1, layer = layer, neuron = neuron)
+            hs = get_hidden_state(model, sequences, CL = neuron+1, layer = layer, neuron = neuron)
             probe = LinearProbe(hs.shape[1])
             probepath = f'probes/{modeltype}/{targetname}_layer{layer}_neuron{neuron}_Linear_probe.pth'
             probe.load_state_dict(torch.load(probepath))
             target_pred = probe(hs).squeeze()
+            print(euler_target, targetname)
             r2 = r2_score(target.detach().numpy(), target_pred.detach().numpy())
             R2s.append(r2)
             avg_mags.append(target.abs().mean())
@@ -224,19 +222,21 @@ def plot_R2_firsths_euler(modeltype = 'underdamped'):
 
 def plot_R2evolve_euler(modeltype = 'underdamped',CL = 65, layer = 2, R2 = True, novar = False):
     # if R2 is true, plot R2. else plot MSE
-    plt.rcParams['text.usetex'] = True
+    #plt.rcParams['text.usetex'] = True
+    key = 'underdamped'
     data = torch.load('data/dampedspring_data.pth')
-    data = torch.cat((data[f'sequences_test_damped'], data[f'sequences_train_damped']))
+    data = torch.cat((data[f'sequences_test_{key}'], data[f'sequences_train_{key}']))
     model = load_model(f'models/spring{modeltype}_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth')
     model.eval()
     if novar:
         target_dict = torch.load('euler_termsnovar_underdamped.pth')
     else:
-        target_dict = torch.load('euler_terms_underdamped.pth')
+        #target_dict = torch.load('euler_terms_underdamped.pth')
+        target_dict = torch.load('matrix_terms_underdamped.pth')
     colors = 'br'
     plt.figure(figsize = (10,5))
     layer = 2
-    mapping = euler_to_term(novar)
+    #mapping = euler_to_term(novar)
     # Create a normalization for the color mapping
     norm = LogNorm(vmin=1e-5, vmax=1e0)
     str = '$R^2$' if R2 else 'MSE'
@@ -248,22 +248,26 @@ def plot_R2evolve_euler(modeltype = 'underdamped',CL = 65, layer = 2, R2 = True,
     hidden_states = hidden_states.transpose(0, 1)
 
 
-    for e, euler_target in enumerate(['x','v']):
+    #for e, euler_target in enumerate(['x','v']):
+    for e in range(1):
         fig, axs = plt.subplots(5,2, sharey = R2, sharex = R2, figsize = (10,10))
         term_num = 0
-        for targetname in [f'{euler_target}{i}{term}' for i in range(5) for term in ['x','v']]:
+        #for targetname in [f'{euler_target}{i}{term}' for i in range(5) for term in ['x','v']]:
+        for j in range(4):
+            
             col_num = term_num % 2
             row_num = term_num // 2
+            targetname = f'w{row_num}{col_num}'
             ax = axs[row_num, col_num]
             if col_num==0:
                 ax.set_ylabel(rf'Order {row_num} Terms\\{str}')
             if row_num == axs.shape[0]-1:
                 ax.set_xlabel('Context Length')
-            if row_num == 0:
-                if col_num == 0:
-                    ax.set_title(rf'$x$ terms in Taylor Expansion of ${euler_target}(t+dt)$')
-                else:
-                    ax.set_title(rf'$v$ terms in Taylor Expansion of ${euler_target}(t+dt)$')
+            # if row_num == 0:
+            #     if col_num == 0:
+            #         ax.set_title(rf'$x$ terms in Taylor Expansion of ${euler_target}(t+dt)$')
+            #     else:
+            #         ax.set_title(rf'$v$ terms in Taylor Expansion of ${euler_target}(t+dt)$')
             neurons = list(range(CL))
             R2s = []
             avg_mags = []
@@ -290,7 +294,7 @@ def plot_R2evolve_euler(modeltype = 'underdamped',CL = 65, layer = 2, R2 = True,
                 print(targetname, row_num, col_num)
                 R2s = [max(0,r2) for r2 in R2s]
                 metric = R2s if R2 else MSEs
-                ax.plot(neurons, metric, color = colors[e], marker = 'o', label = rf'${targetname}:{mapping[targetname]}$\\Avg Mag = {target.abs().mean().item():.2e}')
+                ax.plot(neurons, metric, color = colors[e], marker = 'o', label = rf'${targetname}')#:{mapping[targetname]}$\\Avg Mag = {target.abs().mean().item():.2e}')
 
                 #scatter = ax.scatter(neurons, R2s, c=avg_mags, cmap=cm.viridis, norm=norm, marker='o', label=targetname)
                 ax.legend()
@@ -301,7 +305,7 @@ def plot_R2evolve_euler(modeltype = 'underdamped',CL = 65, layer = 2, R2 = True,
             else:
                 ax.set_xscale('log')
                 ax.set_yscale('log')
-        fig.suptitle(rf'Evolution of {str} of Linear Probes for Taylor Expansion ${euler_target}(t+dt)$\\{modeltype} Model, Layer {layer}')
+        #fig.suptitle(rf'Evolution of {str} of Linear Probes for Taylor Expansion ${euler_target}(t+dt)$\\{modeltype} Model, Layer {layer}')
         # cbar = fig.colorbar(scatter, ax=axs.ravel().tolist(), orientation='vertical')
         # cbar.set_label('Average Magnitude (log scale)')
         plt.subplots_adjust(wspace=0, hspace=0)
@@ -685,6 +689,8 @@ def matrix_formulation():
     pred = torch.einsum('btik,btk->bti', matrix, X)
     criterion = torch.nn.MSELoss()
     loss = criterion(pred, y)
+    print(loss)
+    return loss
 
 
 
@@ -699,7 +705,9 @@ if __name__ == '__main__':
     sequences = data['sequences_test_damped']
     times = data['times_test_damped']
     deltat = times[:,1] - times[:,0]
-    matrix_formulation()
+    #matrix_formulation()
+    #plot_R2evolve_euler(R2 = False)
+    plot_R2_firsths_euler()
     #eulers_method(sequences, omegas, gammas, deltat, order = 2)
     #compare_transformer_euler(order =  2)
     #probetargets(plot = True)

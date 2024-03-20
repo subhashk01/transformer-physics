@@ -347,26 +347,6 @@ def create_probes(models):
                     'v4x': deltat**4 * (2 * gamma**3 * omega0**2 - omega0**4 * gamma) * x
 
                     }
-        tsize = targetdict['x0x'].size()
-        targetdictnovar = {
-                    'x1v': deltat.repeat(1, tsize[1]),
-                    'x2v': (deltat**2 * gamma).repeat(1, tsize[1]),
-                    'x2x': (deltat**2 * omega0**2).repeat(1, tsize[1]),
-                    'x3v': (deltat**3 * (4 * gamma**2 - omega0**2)).repeat(1, tsize[1]),
-                    'x3x': (deltat**3 * gamma * omega0**2).repeat(1, tsize[1]),
-                    'x4v': (deltat**4 * (-2 * gamma**3 + omega0**2 * gamma)).repeat(1, tsize[1]),
-                    'x4x': (deltat**4 * (-4 * gamma**2 * omega0**2 + omega0**4)).repeat(1, tsize[1]),
-
-                    'v1v': (deltat * gamma).repeat(1, tsize[1]),
-                    'v1x': (deltat * omega0**2).repeat(1, tsize[1]),
-                    'v2v': (deltat**2 * (4 * gamma**2 - omega0**2)).repeat(1, tsize[1]),
-                    'v2x': (deltat**2 * gamma * omega0**2).repeat(1, tsize[1]),
-                    'v3v': (deltat**3 * (-2 * gamma**3 + omega0**2 * gamma)).repeat(1, tsize[1]),
-                    'v3x': (deltat**3 * (-4 * gamma**2 * omega0**2 + omega0**4)).repeat(1, tsize[1]),
-                    'v4v': (deltat**4 * (16 * gamma**4 - 12 * omega0**2 * gamma**2 + omega0**4)).repeat(1, tsize[1]),
-                    'v4x': (deltat**4 * (2 * gamma**3 * omega0**2 - omega0**4 * gamma)).repeat(1, tsize[1])
-
-        }
 
         matrixtarget = {
                     'w00': w00 * x,
@@ -375,10 +355,19 @@ def create_probes(models):
                     'w11': w11 * v
         }
 
+        basicdata = {
+            'sequences': data,
+            'omegas': omega0,
+            'gammas': gamma,
+            'deltat': deltat
+        }
+
+
         # save targetdict
-        torch.save(targetdict, f'euler_terms_{modelkey}.pth')
-        torch.save(targetdictnovar, f'euler_termsnovar_{modelkey}.pth')
-        torch.save(matrixtarget, f'matrix_terms_{modelkey}.pth')
+        torch.save({**targetdict, **basicdata}, f'data/euler_terms_{modelkey}.pth')
+        torch.save({**matrixtarget, **basicdata}, f'data/matrix_terms_{modelkey}.pth')
+        continue
+
     
         # save target_dict
 
@@ -395,7 +384,45 @@ def create_probes(models):
         for target_name in lookat.keys():
             target_vals = lookat[target_name]#[:, neuron]
             probe_hiddenstates(model, modelkey, data, target_vals, target_name, linear = True, CL = 65, epochs = 20000, num_layers = 2)
-    
+
+
+def deltat_loss_relationship(model):
+    key = 'underdamped'
+    data = torch.load('data/dampedspring_data.pth')
+    sequences = data[f'sequences_train_{key}']
+    deltat = data[f'times_train_{key}'][:, 1] - data[f'times_train_{key}'][:, 0]
+    indices = torch.randperm(sequences.size(0))
+    sequences = sequences[indices][:500]
+    deltat = deltat[indices][:500]
+    X,y = sequences[:,:-1,:],sequences[:,1:,:]
+
+    with torch.no_grad():
+        y_pred = model(X)
+        MSE = (y_pred - y)**2
+        dims = torch.arange(1, MSE.shape[1]+1)
+        dims = dims.repeat(MSE.shape[0], 1).flatten()
+        print(deltat.shape)
+        #deltat = deltat.repeat(MSE.shape[1])
+        deltat = deltat.repeat(MSE.shape[1], 1).numpy()
+        deltat = deltat.flatten('F')
+
+        # repeat deltat for MSE.shape[1]
+        # repeat first digit of deltat n times and do for all digits
+        #print(dims.squeeze())
+        MSE = torch.flatten(torch.mean(MSE, dim = 2)).numpy()
+        
+
+    # color bar by dims
+    plt.scatter(deltat, MSE) #c = deltat, cmap = 'viridis')
+    # show colorbar
+    cbar = plt.colorbar()
+    cbar.set_label('Delta T')
+    #plt.scatter(deltat, MSE, c = 'b')
+    plt.xlabel('Delta T')
+    plt.ylabel('MSE')
+    plt.title(f'MSE vs Delta T for {key} on Train Set')
+    plt.yscale('log')
+    plt.show()
 
 
 if __name__ == '__main__':
@@ -426,11 +453,14 @@ if __name__ == '__main__':
                 }
     models = {'underdamped': underdamped,
               #'3-layer underdamped': underdamped3, 
-            #   'overdamped':overdamped, 
-            #   'damped':damped
+              'overdamped':overdamped, 
+              'damped':damped
               }
-    #test_ICL(models, evaluate)
+    #deltat_loss_relationship(underdamped)
     create_probes(models)
+    
+    #test_ICL(models, evaluate)
+    #create_probes(models)
 
     
             # r2 = probe_hiddenstate(model = model, modelname = modelkey, data = data, target_vals = target_vals, target_name = target_name, linear = True, CL = 10, epochs = 10000, layer = layer, neuron = neuron, plot = False)
