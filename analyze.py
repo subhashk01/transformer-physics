@@ -296,7 +296,7 @@ def create_probes(models, targetdicts, datatype = 'underdamped', traintest = 'tr
             print(sequences.shape)
             for target_name in targetdict.keys():
                 target_vals = targetdict[target_name]#[:, neuron]
-                probe_hiddenstates(model, modelkey, sequences, target_vals, target_name, linear = True, CL = 5, epochs = 10, num_layers = 2)
+                probe_hiddenstates(model, modelkey, sequences, target_vals, target_name, linear = True, CL = 65, epochs = 20000, num_layers = 2)
 
 
 def deltat_loss_relationship(model):
