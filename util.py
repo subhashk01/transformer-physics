@@ -59,7 +59,7 @@ def get_hidden_state_old(model, CL, layer = 0, neuron = 0, target = 'omegas'):
     return hidden_states, target_vals
 
 def get_hidden_state(model, data, CL, layer = 0, neuron = 0):
-    hidden_states = get_hidden_states(model, data, CL, layer)
+    hidden_states = get_hidden_states(model, data, CL)
     hidden_states = hidden_states[:, layer, neuron, :]
 
     return hidden_states
@@ -110,3 +110,21 @@ def euler_to_term(novar = False):
         return mappingnovar
     else:
         return mapping
+    
+def matrix_weights_to_term():
+    mapping = {'w00': '(\cos {\omega \Delta t} + \gamma / \omega \sin {\omega \Delta t})x',
+               'w01': ' (\sin { \omega \Delta t })v ',
+               'w10': '-({\gamma^2+\omega^2}) / {\omega} \sin {\omega \Delta t}x',
+               'w11': '(\cos {\omega \Delta t} - \gamma / \omega \sin {\omega \Delta t})v'}
+    return mapping
+
+
+
+def get_data(datatype = 'underdamped', traintest = 'train'):
+    data = torch.load('data/dampedspring_data.pth')
+    gammas = data[f'gammas_{traintest}_{datatype}']
+    omegas = data[f'omegas_{traintest}_{datatype}']
+    sequences = data[f'sequences_{traintest}_{datatype}']
+    times = data[f'times_{traintest}_{datatype}']
+    deltat = times[:, 1] - times[:, 0]
+    return gammas, omegas, sequences, times, deltat

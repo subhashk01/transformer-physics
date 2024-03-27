@@ -4,12 +4,13 @@ from config import get_default_config
 import numpy as np
 import torch.nn as nn
 from matplotlib.ticker import ScalarFormatter
-from util import load_model, get_hidden_state, get_hidden_state_old, set_seed
+from util import load_model, get_hidden_state, get_hidden_state_old, set_seed, get_data
 from scipy.stats import pearsonr
 from sklearn.decomposition import PCA
 from sklearn.feature_selection import mutual_info_regression
 from inspector_models import NonLinearProbe, probe_hiddenstate, probe_hiddenstates, LinearProbe
 from scipy.stats import linregress
+from numerical_methods_theory import rk, general_linear_multistep
 
 
 
@@ -272,118 +273,30 @@ def generate_targets(omega, gamma, deltat):
     return targetdict
 
 
-def create_probes(models):
+def create_probes(models, targetdicts, datatype = 'underdamped', traintest = 'train'):
     for modelkey in models.keys():
-        key = 'underdamped'
-        data = torch.load('data/dampedspring_data.pth')
-        deltat = data[f'times_test_{key}'][:, 1] - data[f'times_test_{key}'][:, 0]
-        deltat =torch.cat((deltat, data[f'times_train_{key}'][:, 1] - data[f'times_train_{key}'][:, 0]), dim=0).unsqueeze(1)
-        omega0= torch.cat((data[f'omegas_test_{key}'], data[f'omegas_train_{key}']), dim=0).unsqueeze(1)
-        gamma= torch.cat((data[f'gammas_test_{key}'], data[f'gammas_train_{key}']), dim=0).unsqueeze(1)
-        omegas = torch.sqrt(omega0**2 - gamma**2)
-        data = torch.cat((data[f'sequences_test_{key}'], data[f'sequences_train_{key}']))
-        x = data[:,:,0]
-        v = data[:,:,1]
+        gammas, omegas, sequences, times, deltat = get_data(datatype = datatype, traintest = traintest)
 
-        prefactor = torch.exp(-gamma*deltat)
-        beta = - (gamma**2 + omegas**2)/omegas
-        cos = torch.cos(omegas*deltat)
-        sin = torch.sin(omegas*deltat)
-        w00 = (cos + gamma/omegas*sin) * prefactor
-        w01 = (sin/omegas) * prefactor
-        w10 = (beta * sin) * prefactor
-        w11 = (cos - gamma/omegas*sin) * prefactor
-        # prefactor = torch.exp(-gamma*deltat)
-        # beta = - (gammas**2 + omegas**2)/omegas
-        # cos = torch.cos(omegas*deltat)
-        # sin = torch.sin(omegas*deltat)
-        # w00 = cos + gammas/omegas*sin
-        # w01 = sin/omegas
-        # w10 = beta * sin
-        # w11 = cos - gammas/omegas*sin
-        # terms = [w00, w01, w10, w11]
+        for targetdict in targetdicts:
+            # save target_dict
 
-        #breakpoint()
+            #generate_targets(omega0, gamma, deltat)
+            model = models[modelkey]
+            print(modelkey)
+            #targets = []
+            avg_magsv = []
+            r2sv = []
+            avg_magsx = []
+            r2sx = []
+            layer, neuron = 2, 0
 
-
-        targetdict = {
-                    # 'omega0':omega0, 
-                    # 'omega0^2': omega0**2, 
-                    # 'omega\lambda': omega, 
-                    # 'omega^2\lambda^2':omega**2, 
-                    # 'gammadivomega': gamma/omega,
-                    # 'vprec_under': (gamma**2+omega**2)/omega, 
-                    # 'gammas':gamma,
-                    # 'deltat':deltat,
-                    # 'omega0^2deltat': omega0**2*deltat,
-                    # 'gammadeltat': gamma*deltat,
-                    # 'omega0deltat': omega0*deltat,
-                    # 'omega0^2deltat^2': omega0**2*deltat**2,
-                    # 'gammadeltat^2': gamma*deltat**2,
-                    # 'gammaomega0^2deltat^2': gamma*omega0**2*deltat**2,
-                    # 'fourgamma^2minusomega0^2deltat^2': (4*gamma**2-omega0**2)*deltat**2,
-                    # 'x0': x0,
-                    # 'v0deltat': v0*deltat,
-                    # 'v0': v0,
-                    # 'omega0^2deltatx0': omega0**2*deltat*x0,
-                    # 'gammadeltatv0': gamma*deltat*v0,
-                    'x0x': x,
-                    'x1v': deltat * v,
-                    'x2v': deltat**2 * gamma * v,
-                    'x2x': deltat**2 * omega0**2 * x,
-                    'x3v': deltat**3 * (4 * gamma**2 - omega0**2) * v,
-                    'x3x': deltat**3 * gamma * omega0**2 * x,
-                    'x4v': deltat**4 * (-2 * gamma**3 + omega0**2 * gamma) * v,
-                    'x4x': deltat**4 * (-4 * gamma**2 * omega0**2 + omega0**4) * x,
-
-                    'v0v': v,
-                    'v1v': deltat * gamma * v,
-                    'v1x': deltat * omega0**2 * x,
-                    'v2v': deltat**2 * (4 * gamma**2 - omega0**2) * v,
-                    'v2x': deltat**2 * gamma * omega0**2 * x,
-                    'v3v': deltat**3 * (-2 * gamma**3 + omega0**2 * gamma) * v,
-                    'v3x': deltat**3 * (-4 * gamma**2 * omega0**2 + omega0**4) * x,
-                    'v4v': deltat**4 * (16 * gamma**4 - 12 * omega0**2 * gamma**2 + omega0**4) * v,
-                    'v4x': deltat**4 * (2 * gamma**3 * omega0**2 - omega0**4 * gamma) * x
-
-                    }
-
-        matrixtarget = {
-                    'w00': w00 * x,
-                    'w01': w01 * v,
-                    'w10': w10 * x,
-                    'w11': w11 * v
-        }
-
-        basicdata = {
-            'sequences': data,
-            'omegas': omega0,
-            'gammas': gamma,
-            'deltat': deltat
-        }
-
-
-        # save targetdict
-        torch.save({**targetdict, **basicdata}, f'data/euler_terms_{modelkey}.pth')
-        torch.save({**matrixtarget, **basicdata}, f'data/matrix_terms_{modelkey}.pth')
-        continue
-
-    
-        # save target_dict
-
-        #generate_targets(omega0, gamma, deltat)
-        model = models[modelkey]
-        print(modelkey)
-        #targets = []
-        avg_magsv = []
-        r2sv = []
-        avg_magsx = []
-        r2sx = []
-        layer, neuron = 2, 0
-        lookat = matrixtarget
-        for target_name in lookat.keys():
-            target_vals = lookat[target_name]#[:, neuron]
-            probe_hiddenstates(model, modelkey, data, target_vals, target_name, linear = True, CL = 65, epochs = 20000, num_layers = 2)
+            data = torch.load('data/dampedspring_data.pth')
+            data = torch.cat((data[f'sequences_test_{datatype}'], data[f'sequences_train_{datatype}']))
+            print(data.shape)
+            print(sequences.shape)
+            for target_name in targetdict.keys():
+                target_vals = targetdict[target_name]#[:, neuron]
+                probe_hiddenstates(model, modelkey, sequences, target_vals, target_name, linear = True, CL = 5, epochs = 10, num_layers = 2)
 
 
 def deltat_loss_relationship(model):
@@ -426,7 +339,8 @@ def deltat_loss_relationship(model):
 
 
 if __name__ == '__main__':
-    set_seed = 0
+    seed = 0
+    set_seed(seed)
     underloss = 'models/springunderdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
     undermodel = 'models/springunderdamped_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth'
     underdamped = load_model(file = undermodel)
@@ -453,11 +367,18 @@ if __name__ == '__main__':
                 }
     models = {'underdamped': underdamped,
               #'3-layer underdamped': underdamped3, 
-              'overdamped':overdamped, 
-              'damped':damped
+            #   'overdamped':overdamped, 
+            #   'damped':damped
               }
     #deltat_loss_relationship(underdamped)
-    create_probes(models)
+    datatype, traintest = 'underdamped', 'train'
+    order = 10
+    rk(order, datatype = datatype, traintest = traintest, plot = False)
+    general_linear_multistep(order, datatype = datatype, traintest = traintest, plot = False)
+    LM = torch.load(f'data/underdampedspring_{datatype}_{traintest}_LM10.pth')
+    RK = torch.load(f'data/underdampedspring_{datatype}_{traintest}_RK10.pth')
+    targetdicts = [LM, RK]
+    create_probes(models, targetdicts)
     
     #test_ICL(models, evaluate)
     #create_probes(models)

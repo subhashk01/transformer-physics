@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from tqdm import tqdm
-from util import load_model, get_hidden_state_old, get_hidden_state
+from util import load_model, get_hidden_state_old, get_hidden_state, get_hidden_states
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score
 from sklearn.decomposition import PCA
@@ -113,30 +113,30 @@ def train_probe(inspector, train_hidden_states, train_target_vals, test_hidden_s
 
     return loss.item(), test_loss.item()
 
-def probe_hiddenstate(model, modelname, data, target_name, target_vals, linear = False, layer = 0, neuron = 0, CL = 10, epochs = 10000, plot = True):
-
-    hidden_states= get_hidden_state(model, data, CL, layer, neuron)
+def probe_hiddenstate(model, modelname, data, target_name, target_vals, hidden_state = None, linear = False, layer = 0, neuron = 0, CL = 10, epochs = 10000, plot = True):
+    if hidden_state is not None:
+        hidden_state= get_hidden_state(model, data, CL, layer, neuron)
 
     linear_name = {True: 'Linear', False: 'NonLinear'}
     if linear:
-        inspector = LinearProbe(hidden_states.shape[-1], 1)
+        inspector = LinearProbe(hidden_state.shape[-1], 1)
     else:
-        inspector = NonLinearProbe(hidden_states.shape[-1], 1)
+        inspector = NonLinearProbe(hidden_state.shape[-1], 1)
 
     # randomize hidden_states and target_vals
-    indices = torch.randperm(hidden_states.shape[0])
+    indices = torch.randperm(hidden_state.shape[0])
 
-    hidden_states = hidden_states[indices]
+    hidden_state = hidden_state[indices]
     target_vals = target_vals[indices] #TODO CHANGE BACK
     # split into test train
-    div = int(0.8*hidden_states.shape[0])
-    train_hidden_states = hidden_states[:div]
-    test_hidden_states = hidden_states[div:]
+    div = int(0.8*hidden_state.shape[0])
+    train_hidden_state = hidden_state[:div]
+    test_hidden_state = hidden_state[div:]
     train_target_vals = target_vals[:div]
     test_target_vals = target_vals[div:]
 
-    train_loss, test_loss = train_probe(inspector, train_hidden_states, train_target_vals, test_hidden_states, test_target_vals, epochs = epochs)
-    target_pred = inspector(hidden_states).detach().numpy()
+    train_loss, test_loss = train_probe(inspector, train_hidden_state, train_target_vals, test_hidden_state, test_target_vals, epochs = epochs)
+    target_pred = inspector(hidden_state).detach().numpy()
     r_squared = r2_score(target_vals, target_pred)
 
     # see if folder model name is in directory probes
@@ -158,12 +158,14 @@ def probe_hiddenstate(model, modelname, data, target_name, target_vals, linear =
 
 def probe_hiddenstates(model, modelname, data, multi_target_vals, target_name, linear = False, CL = 10, epochs = 10000, num_layers = 2):
     correlations = []
+    hidden_states = get_hidden_states(model, data, CL)
     for layer in [num_layers]: #only do last layer#range(num_layers+1):
         layer_corr = []
         for neuron in range(CL):
+            hidden_state = hidden_states[:, layer, neuron, :]
             target_vals = multi_target_vals[:, neuron] # comment if not needed
             print(f'{target_name} Layer: {layer}, Neuron: {neuron}')
-            r2 = probe_hiddenstate(model, modelname, data, layer = layer, neuron = neuron, target_vals = target_vals, target_name = target_name,  CL = CL, epochs = epochs, plot = False, linear = linear)
+            r2 = probe_hiddenstate(model, modelname, data, hidden_state = hidden_state, layer = layer, neuron = neuron, target_vals = target_vals, target_name = target_name,  CL = CL, epochs = epochs, plot = False, linear = linear)
             print(f'R^2: {r2:.2f}')
             layer_corr.append(r2)
         correlations.append(layer_corr)
@@ -307,7 +309,17 @@ def plot_ellipse(model, layer=0, neuron=0, target='omegas', CL=10):
     plt.show()
 
 
-
+def getLinearProbe(hs, modeltype, targetname, layer, neuron, neuronall):
+    # retrieves a stored linear probe and runs it on a hidden state
+    if neuronall: # want the probe that was used on all neurons not a single state
+        neuronstr = 'allneurons'
+    else:
+        neuronstr = f'neuron{neuron}'
+    probe = LinearProbe(hs.shape[1])
+    probepath = f'probes/{modeltype}/{targetname}_layer{layer}_{neuronstr}_Linear_probe.pth'
+    probe.load_state_dict(torch.load(probepath))
+    target_pred = probe(hs).squeeze()
+    return target_pred
 
 
 if __name__ == '__main__':
