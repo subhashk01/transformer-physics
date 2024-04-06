@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
-from util import load_model, get_data
+from util import load_model, get_data, get_log_log_linear, linear_multistep_coefficients
 import matplotlib.pyplot as plt
 from math import factorial
-from scipy.stats import linregress
+
 '''
 This file is used to test the various numerical methods we hypothesize 
 the transformer could be using. We don't test the numerical methods on the Transformer.
@@ -42,9 +42,7 @@ def plot_numerical_method(preds, ys, deltat, title):
         y = ys[order]
         for i,target in enumerate(targets):
             MSE = ((pred[:,:,i] - y[:,:,i])**2).mean(dim=1)
-            xlog = np.log(deltat)
-            ylog = np.log(MSE)
-            slope, intercept, r_value, p_value, std_err = linregress(xlog, ylog)
+            slope, intercept, r_value = get_log_log_linear(deltat, MSE)
             color = colors[order % len(colors)]
             mse = MSE.mean()
             axs[i].scatter(deltat, MSE, alpha = 1, color = color, label = f'{target}: Order {order+1}, MSE~{mse:.2e}\nlog(MSE) = {slope:.2f}log($\Delta t$)+{intercept:.2f}, R^2 = {r_value**2:.2f}')
@@ -63,6 +61,7 @@ def rk(maxterm = 5, datatype = 'damped', traintest = 'train', plot = True):
     terms = {}
     X,y = sequences[:,:-1, :], sequences[:,1:, :]
     matrix = get_A(gammas, omegas, X)
+    terms['sequences'] = sequences
 
     deltat_tile = deltat.tile(X.shape[1], 1).T
     targets = ['x','v']
@@ -96,7 +95,7 @@ def rk(maxterm = 5, datatype = 'damped', traintest = 'train', plot = True):
     if plot:
         plot_numerical_method(preds, ys, deltat, title)
     torch.save(terms,f'data/underdampedspring_{datatype}_{traintest}_RK{maxterm}.pth')
-    return terms, MSEs
+    return terms, MSEs, preds, ys
 
 def general_linear_multistep(maxsteps = 5, datatype = 'damped', traintest = 'train', plot = True):
 
@@ -104,6 +103,7 @@ def general_linear_multistep(maxsteps = 5, datatype = 'damped', traintest = 'tra
     X,y = sequences[:,:-1,:], sequences[:,1:, :]
     terms = {}
     matrix = get_A(gammas, omegas, X)
+    terms['sequences'] = sequences
 
     targets = ['x','v']
     y_backsteps = [torch.zeros(y.shape)] # implict step. not used for y
@@ -125,10 +125,15 @@ def general_linear_multistep(maxsteps = 5, datatype = 'damped', traintest = 'tra
                     for col in range(2):
                         f_backstep[:,n,row,col] = deltat * matrix[:,n,row,col] * X[:,n-backstep+1,col] # +1 bc we predicting y
                 y_backstep[:,n] = X[:,n-backstep+1]
+            
         for row in range(2):
             terms[f'LMy_{targets[row]}{backstep}'] = y_backstep[:,:,row]
             for col in range(2):
                 terms[f'LMf_{targets[row]}{backstep}{targets[col]}'] = f_backstep[:,:,row,col]
+        print(backstep)
+        print(f_backstep.shape)
+        print(f_backstep.sum(dim=3).shape)
+
         y_backsteps.append(y_backstep)
         f_backsteps.append(f_backstep.sum(dim = 3))
     torch.save(terms,f'data/underdampedspring_{datatype}_{traintest}_LM{maxsteps}.pth')
@@ -158,43 +163,19 @@ def general_linear_multistep(maxsteps = 5, datatype = 'damped', traintest = 'tra
         plot_numerical_method(exp_preds, ys_exp, deltat, exp_title)
         plot_numerical_method(imp_preds, ys_imp, deltat, imp_title)
 
-    
-    return terms, MSE_exp, MSE_imp
+    preds = {'exp_preds': exp_preds, 'ys_exp': ys_exp, 'imp_preds':imp_preds, 'ys_imp': ys_imp}
+    return terms, MSE_exp, MSE_imp, preds
 
 def get_linear_multistep_pred(order, f_backsteps, y_backsteps, explicit = True):
     if explicit:
         f = f_backsteps[1:]
         y = y_backsteps[1:]
         # adams bashworth method coefficeints
-        all_coefficients = {
-                1: [[1], [1]],
-                2: [[1], [3/2, -1/2]],
-                3: [[1], [23/12, -16/12, 5/12]],
-                4: [[1], [55/24, -59/24, 37/24, -9/24]],
-                5: [[1], [1901/720, -2774/720, 2616/720, -1274/720, 251/720]],
-                6: [[1], [4277/1440, -7923/1440, 9982/1440, -7298/1440, 2877/1440, -475/1440]],
-                7: [[1], [198721/60480, -447288/60480, 705549/60480, -688256/60480, 407139/60480, -134472/60480, 19087/60480]],
-                8: [[1], [434241/120960, -1152169/120960, 2183877/120960, -2664477/120960, 2102243/120960, -1041723/120960, 295767/120960, -36799/120960]],
-                9: [[1], [14097247/3628800, -43125206/3628800, 95476786/3628800, -139855262/3628800, 137968480/3628800, -91172642/3628800, 38833486/3628800, -9664106/3628800, 1070017/3628800]],
-                10: [[1], [30277247/7257600, -104995189/7257600, 265932123/7257600, -454661776/7257600, 538363838/7257600, -444772162/7257600, 252618224/7257600, -94307320/7257600, 20884811/7257600, -2082753/7257600]]
-            } # coefs given as y, f
     else:
         f = f_backsteps
         y = y_backsteps
         # adams moulton method coefficients
-        all_coefficients = {
-                1: [[0, 1], [1]],
-                2: [[0, 1], [1/2, 1/2]],
-                3: [[0, 1], [5/12, 2/3, -1/12]],
-                4: [[0, 1], [9/24, 19/24, -5/24, 1/24]],
-                5: [[0, 1], [251/720, 646/720, -264/720, 106/720, -19/720]],
-                6: [[0, 1], [475/1440, 1427/1440, -798/1440, 482/1440, -173/1440, 27/1440]],
-                7: [[0, 1], [19087/60480, 65112/60480, -46461/60480, 37504/60480, -20211/60480, 6312/60480, -863/60480]],
-                8: [[0, 1], [36799/120960, 139849/120960, -121797/120960, 123133/120960, -88547/120960, 41499/120960, -11351/120960, 1375/120960]],
-                9: [[0, 1], [1070017/3628800, 4467094/3628800, -4604594/3628800, 5595358/3628800, -5033120/3628800, 3146338/3628800, -1291214/3628800, 312874/3628800, -33953/3628800]],
-                10: [[0, 1], [2082753/7257600, 9449717/7257600, -11271304/7257600, 16002320/7257600, -17283646/7257600, 13510082/7257600, -7394032/7257600, 2687864/7257600, -583435/7257600, 57281/7257600]]
-            }
-
+    all_coefficients = linear_multistep_coefficients(explicit)
     coefficients = all_coefficients[order]
     f_sum = torch.zeros(f[0].shape)
     y_sum = torch.zeros(y[0].shape)
@@ -207,8 +188,43 @@ def get_linear_multistep_pred(order, f_backsteps, y_backsteps, explicit = True):
     return pred
 
 
+def test_ICL_LM(order = 10,  method = 'LM_imp', datatype = 'underdamped', traintest = 'train'):
+
+    if method[:2] == 'LM':
+        _, _, _, preds = general_linear_multistep(maxsteps = order, datatype = datatype, traintest = traintest, plot=False)
+        ei = method[-3:]
+        ys = preds[f'ys_{ei}'] # expects imp or exp
+        ypreds = preds[f'{ei}_preds']
+        title = f'Linear Multistep {ei} ICL Test'
+    elif method[:2] == 'rk':
+        _, _, ypreds, ys = rk(maxterm = order, datatype = datatype, traintest = traintest, plot = False)
+        title = 'Runge Kutta ICL Test'
+    criterion = nn.MSELoss()
+    plt.figure(figsize = (10,10))
+    for o in range(order):
+        y, ypred = ys[o], ypreds[o]
+        mses = []
+        CLs = []
+        for CL in range(1,y.shape[1]):
+            mse = criterion(y[:,:CL], ypred[:,:CL])
+            mses.append(mse)
+            CLs.append(CL+o)
+        slope, intercept, r_value = get_log_log_linear(CLs, mses)
+        plt.plot(CLs, mses, label = rf'Order {o+1}, log(mse) = {slope:.2f}log(CLs)+{intercept:.2f}, $R^2$ = {r_value**2:.2f}')
+    plt.yscale('log')
+    plt.xscale('log')
+    plt.xlabel('Context Length')
+    plt.title(title)
+    plt.ylabel('MSE')
+    plt.legend()
+    plt.show()
+        
+
+
+
+
 def compare_methods(highest_order = 5, datatype = 'damped', traintest = 'train'):
-    _, MSE_imp, MSE_exp = general_linear_multistep(highest_order, datatype, traintest, False)
+    _, MSE_imp, MSE_exp, _ = general_linear_multistep(highest_order, datatype, traintest, False)
     _, MSE_rk = rk(highest_order, datatype, traintest, False)
     MSE_imp = torch.stack(MSE_imp)
     MSE_exp = torch.stack(MSE_exp)
@@ -233,12 +249,63 @@ def compare_methods(highest_order = 5, datatype = 'damped', traintest = 'train')
         print()
             
             
-    #plt.show()
+def exp_weights(datatype = 'underdamped', traintest = 'train'):
+    
+    gamma, omega0, data, times, deltat = get_data(datatype = datatype, traintest = traintest)
+    X,y = data[:,:-1,:], data[:,1:,:]
+    omegas = torch.sqrt(omega0**2 - gamma**2)
+    prefactor = torch.exp(-gamma*deltat)
+    beta = - (gamma**2 + omegas**2)/omegas
+    cos = torch.cos(omegas*deltat)
+    sin = torch.sin(omegas*deltat)
+    w00 = (cos + gamma/omegas*sin) * prefactor
+    w01 = (sin/omegas) * prefactor
+    w10 = (beta * sin) * prefactor
+    w11 = (cos - gamma/omegas*sin) * prefactor
+    w00 = w00.unsqueeze(1)
+    w01 = w01.unsqueeze(1)
+    w10 = w10.unsqueeze(1)
+    w11 = w11.unsqueeze(1)
+
+
+    x = X[:,:,0]
+    v = X[:,:,1]
+
+    matrixtarget = {
+                    'w00': w00 * x,
+                    'w01': w01 * v,
+                    'w10': w10 * x,
+                    'w11': w11 * v,
+                    'sequences': data
+        }
+    torch.save(matrixtarget, f'data/{datatype}spring_{datatype}_{traintest}_mw.pth')
+
+
+def matrix_weights_prediction(datatype = 'underdamped', traintest = 'train'):
+    gamma, omega0, data, times, deltat = get_data(datatype = datatype, traintest = traintest)
+    X, y = data[:,:-1,:], data[:,1:,:]
+    matrixtarget = torch.load(f'data/{datatype}spring_{datatype}_{traintest}_mw.pth')
+    xpred = matrixtarget['w00'] + matrixtarget['w01']
+    vpred = matrixtarget['w10'] + matrixtarget['w11']
+    pred = torch.stack([xpred, vpred], dim = 2)
+    MSE = ((pred - y)**2).mean()
+    print(MSE)
+
+
 
 if __name__ == '__main__':
+    exp_weights()
     order = 10
-    rk(order, datatype = 'underdamped',traintest = 'train', plot = False)
-    general_linear_multistep(order, datatype = 'underdamped',traintest = 'train', plot = False)
+    #test_ICL_LM(explicit = True)
+    # rk(order, datatype = 'underdamped',traintest = 'train', plot = False)
+    #general_linear_multistep(order, datatype = 'underdamped',traintest = 'train', plot = False)
+    #lm = torch.load('data/underdampedspring_underdamped_train_LM10.pth')
+    #print(lm['LMf_x4x'])
+    # methods = ['LM_exp', 'rk']
+    # for method in methods:
+    #     test_ICL_LM(method = method)
     #compare_methods()
     #print(ans)
+    #exp_weights()
+    matrix_weights_prediction()
     # get_data()

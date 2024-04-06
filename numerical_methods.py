@@ -5,17 +5,31 @@ import torch.optim as optim
 import numpy as np
 from util import load_model
 import matplotlib.pyplot as plt
-from inspector_models import getLinearProbe, LinearProbe, LinearDirect
+from inspector_models import LinearProbe, LinearDirect
 from util import get_hidden_state, get_hidden_states, euler_to_term, matrix_weights_to_term
 from sklearn.metrics import r2_score
 from matplotlib.colors import LogNorm
 import matplotlib.cm as cm
 from tqdm import tqdm
+import re
+from sklearn.decomposition import PCA
+
+def getLinearProbe(hs, modeltype, targetname, layer, neuron, neuronall):
+    # retrieves a stored linear probe and runs it on a hidden state
+    if neuronall: # want the probe that was used on all neurons not a single state
+        neuronstr = 'allneurons'
+    else:
+        neuronstr = f'neuron{neuron}'
+    probe = LinearProbe(hs.shape[1])
+    probepath = f'probes/{modeltype}/{targetname}_layer{layer}_{neuronstr}_Linear_probe.pth'
+    probe.load_state_dict(torch.load(probepath))
+    target_pred = probe(hs).squeeze()
+    return target_pred, probe
 
 def find_neuron_encoding(hidden_states, targetvals, targetname, modeltype, layer, neuron, neuronall = False):
     # for a given hidden state, finds the R^2, MSE, and avg mag of the linear probe of the targetname
     hs = hidden_states[:, layer, neuron, :]
-    target_pred = getLinearProbe(hs, modeltype, targetname, layer, neuron, neuronall)
+    target_pred, _ = getLinearProbe(hs, modeltype, targetname, layer, neuron, neuronall)
     r2 = r2_score(targetvals.detach().numpy(), target_pred.detach().numpy())
     criterion = nn.MSELoss()
     mse = criterion(target_pred, targetvals).detach()
@@ -62,8 +76,61 @@ def plot_R2_firsths_euler(modeltype = 'underdamped', dataset = 'underdamped', la
     plt.title(rf'$R^2$ of Linear Probes for Taylor Expansion\\{modeltype} Model, Layer {layer}, Neuron {neuron}')
     plt.show()
 
+def R2MSE_evolution(probe = 'RK', modeltype = 'underdamped', dataset = 'underdamped', traintest = 'train', maxorder = 9, CL = 65):
+    #probe can either be rk or LM (right now)
+    model = load_model(f'models/spring{modeltype}_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth')
+    model.eval()
+    plt.rcParams['text.usetex'] = True
+    terms = torch.load(f'data/{modeltype}spring_{dataset}_{traintest}_{probe}10.pth')
+    sequences = terms.pop('sequences')
+    hidden_states = get_hidden_states(model, sequences, CL = CL)
+    toplot = {}
+    for targetname, targetvals in terms.items():
+        print(targetname)
+        r2s, mses = [], []
+        order = int(re.search(r'_[a-zA-Z](\d+)', targetname).group(1))
+        if order > maxorder:
+            continue
+        if probe == 'LM':
+            neurons = list(range(max(order, 1)-1, CL))
+        else: neurons = list(range(CL))
+        for neuron in neurons:
+            r2, mse = find_neuron_encoding(hidden_states, targetvals[:, neuron], targetname, modeltype, layer = 2, neuron = neuron, neuronall = False)
+            r2s.append(r2)
+            mses.append(mse)
+        toplot[targetname] = [neurons, r2s, mses]
+    plot_R2MSE_evolutions(toplot, maxorder)
+    
+def plot_R2MSE_evolutions(toplot, order):
+    prefixes = set(x.split('_')[0] for x in toplot)
+    contributors = ['x', 'v']
+    for prefix in prefixes:
+        print(prefix)
+        for target in contributors:
+            fig, axs = plt.subplots(nrows = order, ncols = 2, figsize = (10,10))
+            for i in range(order):
+                for j, contributor in enumerate(contributors):
+                    term = f'{prefix}_{target}{i}{contributor}'
+                    
+                    if term in toplot:
+                        mses = toplot[term][2]
+                        r2s = [max(r2,0) for r2 in toplot[term][1]]
+                        CLs = toplot[term][0]
+                        print('yoo')
+                        print(term, CLs, r2s)
+                        axs[i,j].plot(CLs, r2s, 'o', label = term, color = 'b')
+                        #axs[i, j].set_yscale('log')
+                        axs[i,j].legend()
+            plt.title(rf'{prefix} Evolution of $R^2$ for {target}')
+            plt.show()
+        break
 
-def plot_R2evolve_euler(testtype = 'euler',modeltype = 'underdamped', dataset = 'underdamped', CL = 65, layer = 2, R2 = True, neuronall = False):
+
+        
+    #print(hidden_states.shape)
+
+
+def plot_R2MSE_evolvutions(testtype = 'euler', modeltype = 'underdamped', dataset = 'underdamped', CL = 65, layer = 2, R2 = True, neuronall = False):
     # plots how the R2 score of the linear probe evolves as the context length increases
     # uses probes stored at keys of mappings, which is a list of mapping, which is a dict that has probename: latex formula 
     # testtype can be either 'euler' or 'matrix_weights'
@@ -292,6 +359,23 @@ def local_truncation_error(modeltype = 'underdamped', dataset = 'underdamped', d
     fig.suptitle(f'LTE vs h for Neuron {neuron}')
     plt.show()
 
+def seeLinearProbeWeights(targetname):
+    weights = []
+    for neuron in range(65):
+        file = f'probes/underdamped/{targetname}_layer2_neuron{neuron}_Linear_probe.pth'
+        probe = LinearProbe(16)
+        probe.load_state_dict(torch.load(file))
+        with torch.no_grad():
+            weight = probe.l2.weight @ probe.l1.weight
+            weight = weight.T.squeeze()
+        weights.append(weight)
+    weights = torch.stack(weights)
+    pca = PCA(n_components=4)
+    pcs = pca.fit_transform(weights)
+    vars = pca.explained_variance_ratio_
+    print(vars.sum())
+
+
 if __name__ == '__main__':
     #compare_transformer_euler()
     data = torch.load('data/dampedspring_data.pth')
@@ -302,7 +386,9 @@ if __name__ == '__main__':
     deltat = times[:,1] - times[:,0]
     #matrix_formulation()
     #plot_R2evolve_euler(R2 = False)
-    plot_R2evolve_euler(testtype = 'matrix_weights', R2 = False, layer = 2, neuronall = True)
+    #plot_R2evolve_euler(testtype = 'matrix_weights', R2 = False, layer = 2, neuronall = True)
+    #R2MSE_evolution()
+    seeLinearProbeWeights('LMf_v2v')
     #local_truncation_error(neuron = 32)
     #probe_allneurons_target(testtype = 'matrix_weights', neuronall = True)
     #eulers_method(sequences, omegas, gammas, deltat, order = 2)

@@ -1,18 +1,26 @@
 import torch
+import os
 from torch.utils.data import DataLoader, TensorDataset
 from model import Transformer
 from util import set_seed
 from config import get_default_config
 from tqdm import tqdm
 from data import generate_springdata, omega1to2, generate_dampedspringdata
+import sys
 
-def train(traindata, testdata,CL=65, loadmodel = False, fname = 'spring', dir = 'models', batch_size = 64, num_epochs = 20000, lr = 0.001):
+def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring', dir = 'models', batch_size = 64, num_epochs = 20000, lr = 0.001):
     set_seed(0)
-    config = get_default_config() 
-    filebase = f'{fname}_{config.n_embd}emb_{config.n_layer}layer_{CL}CL_{num_epochs}epochs_{lr}lr_{batch_size}batch'
-    print(filebase)
-    modelfile = f'{dir}/{filebase}_model.pth'
-    lossesfile = f'{dir}/{filebase}_losses.pth'
+    if config is None:
+        config = get_default_config() 
+    base = f'{fname}_{config.n_embd}emb_{config.n_layer}layer'
+    filebase = f'{base}_{CL}CL_{num_epochs}epochs_{lr}lr_{batch_size}batch'
+    totalbase = f'{dir}/{base}/{filebase}'
+    modelfile = f'{totalbase}_model.pth'
+    lossesfile = f'{totalbase}_losses.pth'
+
+    if base not in os.listdir(dir):
+        os.mkdir(f'{dir}/{base}')
+
 
     traindata = traindata[:,:CL+1,:] # only use 10 timesteps for transformer predictions. it's shown an ability to learn off of this.
     X, y = traindata[:,:-1,:], traindata[:,1:,:]
@@ -23,10 +31,7 @@ def train(traindata, testdata,CL=65, loadmodel = False, fname = 'spring', dir = 
     X_test_in, y_test_in = X[div:], y[div:]
 
     testdata = testdata[:,:CL+1,:] # only use 10 timesteps for transformer predictions.rest of data is for icl experiments
-    print(testdata.shape)
     X_test_out, y_test_out = testdata[:,:-1,:], testdata[:,1:,:]
-
-
 
     # Create DataLoaders
     train_dataset = TensorDataset(X_train, y_train)
@@ -42,19 +47,14 @@ def train(traindata, testdata,CL=65, loadmodel = False, fname = 'spring', dir = 
     if loadmodel:
         print(f'Loading model from {loadmodel}')
         model.load_state_dict(torch.load(loadmodel))
-        original_parameters = {name: param.data.clone() for name, param in model.named_parameters()}
-        make_trainable = ['blocks.1.mlp.c_proj.bias', 'blocks.1.mlp.c_proj.weight', 'ln_f.weight', 'ln_f.bias', 'blocks.1.mlp.c_fc.weight', 'blocks.1.mlp.c_fc.bias']
-    
         for name, param in model.named_parameters():
-            if name not in make_trainable:  # Replace 'last_layer_name' with the name of your last layer
-                param.requires_grad = False 
+            param.requires_grad = False 
 
     model.train()
 
     # Loss function and optimizer
     criterion = torch.nn.MSELoss()
-    
-    
+
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     # Track the best model
@@ -67,10 +67,6 @@ def train(traindata, testdata,CL=65, loadmodel = False, fname = 'spring', dir = 
     test_in_losses = []
     test_out_losses = []
 
-    # Define the regularization strength
-    reg_strength = 1.0
-    l1_loss = torch.nn.L1Loss()
-    
 
     for epoch in epoch_pbar:
         model.train()
@@ -79,21 +75,12 @@ def train(traindata, testdata,CL=65, loadmodel = False, fname = 'spring', dir = 
         for batch_X, batch_y in train_loader:
             optimizer.zero_grad()
             output = model(batch_X)
-            loss = criterion(output, batch_y)
-            # regularization_loss = 0
-            # if loadmodel:
-            #     for name, param in model.named_parameters():
-            #         regularization_loss += l1_loss(param, original_parameters[name])
-            #     print(f'REGULARIZATION_LOSS: {regularization_loss}')
-            #     loss += reg_strength * regularization_loss
-
-            
+            loss = criterion(output, batch_y)    
             loss.backward()
             optimizer.step()
 
             total_train_loss += loss.item()
         
-    
         # Calculate train loss for the epoch
         epoch_train_loss = total_train_loss / len(train_loader)
         
@@ -123,6 +110,9 @@ def train(traindata, testdata,CL=65, loadmodel = False, fname = 'spring', dir = 
         if epoch % 100 == 0:    
             torch.save({'train_losses': train_losses, 'test_in_losses': test_in_losses, 'test_out_losses': test_out_losses}, lossesfile)
 
+        if epoch % 500 == 0:
+            torch.save(model.state_dict(), f'{totalbase}_model_epoch{epoch}.pth')
+
         # Update the best model if the current loss is lower
         if epoch_test_in_loss < best_loss:
             best_loss = epoch_test_in_loss
@@ -141,6 +131,19 @@ def train(traindata, testdata,CL=65, loadmodel = False, fname = 'spring', dir = 
     
     return model
 
+def train_many(Ls, Ws,title, traindata, testdata, CL, my_task_id, num_tasks):
+    if my_task_id is None:
+        my_task_id = int(sys.argv[1])
+    if num_tasks is None:
+        num_tasks = int(sys.argv[2])
+    fnames = [(L,W) for L in Ls for W in Ws]
+    my_fnames = fnames[my_task_id:len(fnames):num_tasks]
+    for L,W in my_fnames:
+        config = get_default_config()
+        config.n_layer = L
+        config.n_embd = W
+        train(config, traindata, testdata, fname = title, CL = CL)
+
 if __name__ == '__main__':
     #generate_springdata(num_samples = 1000, sequence_length=50, plot = False)
     # datadict = torch.load('data/spring_data.pth')
@@ -150,22 +153,25 @@ if __name__ == '__main__':
     # testomegas = datadict['test_omegas']
     #generate_dampedspringdata(num_samples = 10000, sequence_length=65, plot = True)
     datadict = torch.load('data/dampedspring_data.pth')
-    CL = 65
-
-    traindata1 = datadict['sequences_train_underdamped']
+    datatype = 'underdamped'
+    traindata1 = datadict[f'sequences_train_{datatype}']
     traindata1 = traindata1[torch.randperm(traindata1.size()[0])]
-    testdata1 = datadict['sequences_test_underdamped']
+    testdata1 = datadict[f'sequences_test_{datatype}']
     testdata1 = testdata1[torch.randperm(testdata1.size()[0])]
-    trained_model1 = train(traindata1,testdata1, fname = 'springunderdamped', CL = CL)
+    CL = 65
+    Ls = [1,2,3]
+    Ws = [2,4,8,16]
+    my_task_id = None
+    num_tasks = None
+    train_many(Ls, Ws, datatype, traindata1, testdata1, CL, my_task_id, num_tasks)
+    # traindata2 = datadict['sequences_train_overdamped']
+    # traindata2 = traindata2[torch.randperm(traindata2.size()[0])]
+    # testdata2 = datadict['sequences_test_overdamped']
+    # testdata2 = testdata2[torch.randperm(testdata2.size()[0])]
+    # trained_model2 = train(traindata2,testdata2, fname = 'springoverdamped', CL = CL)
 
-    traindata2 = datadict['sequences_train_overdamped']
-    traindata2 = traindata2[torch.randperm(traindata2.size()[0])]
-    testdata2 = datadict['sequences_test_overdamped']
-    testdata2 = testdata2[torch.randperm(testdata2.size()[0])]
-    trained_model2 = train(traindata2,testdata2, fname = 'springoverdamped', CL = CL)
-
-    traindata3 = torch.cat((datadict['sequences_train_underdamped'], datadict['sequences_train_overdamped']), dim = 0)
-    traindata3 = traindata3[torch.randperm(traindata3.size()[0])]
-    testdata3 = torch.cat((datadict['sequences_test_underdamped'], datadict['sequences_test_overdamped']), dim = 0)
-    testdata3 = testdata3[torch.randperm(testdata3.size()[0])]
-    trained_model3 = train(traindata3,testdata3, fname = 'springdamped', CL = CL)
+    # traindata3 = torch.cat((datadict['sequences_train_underdamped'], datadict['sequences_train_overdamped']), dim = 0)
+    # traindata3 = traindata3[torch.randperm(traindata3.size()[0])]
+    # testdata3 = torch.cat((datadict['sequences_test_underdamped'], datadict['sequences_test_overdamped']), dim = 0)
+    # testdata3 = testdata3[torch.randperm(testdata3.size()[0])]
+    # trained_model3 = train(traindata3,testdata3, fname = 'springdamped', CL = CL)

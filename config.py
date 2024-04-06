@@ -93,7 +93,8 @@ def get_default_config():
     C.embd_pdrop = 0
     C.resid_pdrop = 0
     C.attn_pdrop = 0
-    C.max_seq_length = 1025
+    C.max_seq_length = 65
 
+    
     
     return C

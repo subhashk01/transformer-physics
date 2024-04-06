@@ -3,13 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from tqdm import tqdm
-from util import load_model, get_hidden_state_old, get_hidden_state, get_hidden_states
+from util import load_model, get_hidden_state_old, get_hidden_state, get_hidden_states, euler_to_term
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score
 from sklearn.decomposition import PCA
 from matplotlib.colors import Normalize
 import numpy as np
 import os
+import matplotlib.colors as mcolors
 
 
 class NonLinearProbe(nn.Module):
@@ -309,23 +310,75 @@ def plot_ellipse(model, layer=0, neuron=0, target='omegas', CL=10):
     plt.show()
 
 
-def getLinearProbe(hs, modeltype, targetname, layer, neuron, neuronall):
-    # retrieves a stored linear probe and runs it on a hidden state
-    if neuronall: # want the probe that was used on all neurons not a single state
-        neuronstr = 'allneurons'
-    else:
-        neuronstr = f'neuron{neuron}'
-    probe = LinearProbe(hs.shape[1])
-    probepath = f'probes/{modeltype}/{targetname}_layer{layer}_{neuronstr}_Linear_probe.pth'
-    probe.load_state_dict(torch.load(probepath))
-    target_pred = probe(hs).squeeze()
-    return target_pred
+
+
+def pca_probes(targetnames, layer, hsize = 16, CL = 65, modeltype = 'underdamped'):
+    def get_weight_probe(probepath):
+        probe = LinearProbe(hsize)
+        probe.load_state_dict(torch.load(probepath))
+        with torch.no_grad():
+            weight = probe.l2.weight @ probe.l1.weight
+            weight = weight.T.squeeze()
+        return weight
+
+    neuron_weights = {}
+    for targetname in targetnames:
+        weights = []
+        neuronnames = [f'neuron{neuron}' for neuron in range(CL)]
+        neuronnames.append('allneurons')
+        for neuronname in neuronnames:
+            probepath = f'probes/{modeltype}/{targetname}_layer{layer}_{neuronname}_Linear_probe.pth'
+            weight = get_weight_probe(probepath)
+            weights.append(weight)
+        
+        weights = torch.stack(weights)
+        neuron_weights[targetname] = weights
+    weights = torch.concat([neuron_weights[t] for t in targetnames])
+    pca = PCA(n_components=2)
+    pcs = pca.fit_transform(weights)
+    start_idx = 0
+    allcolors = list(mcolors.CSS4_COLORS.keys())
+
+    div = len(allcolors)//len(targetnames)
+    for i, targetname in enumerate(targetnames):
+        color = allcolors[div*i]
+        end_idx = start_idx + neuron_weights[targetname].shape[0]-1
+        pctarget = pcs[start_idx:end_idx]
+        plt.scatter(pctarget[:,0], pctarget[:,1], color = color, label = f'{targetname} Probes')
+        start_idx = end_idx
+        end_idx = start_idx+1
+        pcalltarget = pcs[start_idx:end_idx]
+        plt.scatter(pcalltarget[:,0], pcalltarget[:,1], color = color, marker = '*', s = 1000)
+        print(targetname, pcalltarget[:,0], pcalltarget[:,1])
+        start_idx = end_idx
+    plt.title(f'PCA of Weights of Linear Probes for Targets\n{modeltype}')
+    vars = pca.explained_variance_ratio_
+    plt.xlabel(f'PC1 Var {vars[0]*100:.2f}%')
+    plt.ylabel(f'PC2 Var {vars[1]*100:.2f}%')
+    plt.legend()
+    plt.show()
+        # pc neuron_weight[targetname] and scatter the values
 
 
 if __name__ == '__main__':
     losspath = 'models/spring_16emb_2layer_65CL_20000epochs_0.001lr_64batch_losses.pth'
     modelpath = 'models/spring_16emb_2layer_65CL_20000epochs_0.001lr_64batch_model.pth'
     model = load_model(file = modelpath)
+
+    keys = list(euler_to_term().keys())
+    xs = []
+    vs = []
+    for key in keys:
+        if key[0]=='x':
+            xs.append(key)
+        else: vs.append(key)
+
+    for i in range(2):
+        for j in range(2):
+            keys.append(f'w{i}{j}')
+    
+    pca_probes(targetnames = keys, layer = 2)
+    #pca_probes(targetnames = vs, layer = 2)
     #check_ellipse(model, poly_deg = 1)
     #plot_ellipse(model)
     #probe_hiddenstate(model, layer = 2, neuron = 0, target = 'omegas')
