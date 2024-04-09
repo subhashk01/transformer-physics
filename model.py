@@ -98,14 +98,23 @@ class Block(nn.Module):
         self.mlpf = lambda x: m.dropout(m.c_proj(m.act(m.c_fc(x)))) # feed forward layer. just fancy shmancy syntax, very basic tho
 
 
-    def forward(self, x, layernorm = False):
+    def forward(self, x, layernorm = False, return_hs = False):
         #BIMT doesnt use layernorm. allegeldy hurts interpretability. here we give ourselves the option to use it
+        hs = {}
         if layernorm:
             x = self.ln1(x)
-        x = x + self.attn(x)
+        attn = self.attn(x)
+        hs['attn'] = attn.clone().detach()
+        x = x + attn
+        hs['attn-res'] = x.clone().detach()
         if layernorm:
             x = x + self.mlpf(self.ln2(x))
-        x = x + self.mlpf(x)
+        mlpx = self.mlpf(x)
+        hs['mlp'] = mlpx.clone().detach()
+        x = x + mlpx
+        hs['mlp-res'] = x.clone().detach()
+        if return_hs:
+            return x, hs
         return x
     
     def get_attn(self, x, layernorm = False):
@@ -169,11 +178,11 @@ class Transformer(nn.Module):
         x = self.l_in(x)
         x = x + pos_embeddings  # Add positional embeddings to input embeddings
 
-        hidden_states = [x.clone().detach()]
+        hidden_states = {0: {'inp': x}}
 
         for i in range(self.n_layer):
-            x = self.blocks[i](x, layernorm)
-            hidden_states.append(x.clone().detach()) 
+            x, hs= self.blocks[i](x, layernorm, return_hs = True)
+            hidden_states[i+1] = hs
         if layernorm:
             x = self.ln_f(x)
         y = self.l_out(x)
