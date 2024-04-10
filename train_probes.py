@@ -87,6 +87,40 @@ def generate_mw_targets(datatype, traintest, maxdeg = 5):
     print(mse)
     save_probetargets(targets, f'mw_targets.pth', datatype, traintest)
 
+
+def generate_exp_targets(datatype, traintest):
+    criterion = torch.nn.MSELoss()
+    omegas, gammas, deltat, X, y, x, v = get_expanded_data(datatype, traintest)
+    A = torch.zeros((X.shape[0],2,2)) # each time series has its own A. but A is constant with CL
+    A[:, 0, 0] = 0
+    A[:, 0, 1] = 1
+    A[:, 1, 0] = -omegas[:, 0]**2
+    A[:, 1, 1] = -2*gammas[:, 0]
+    deltat = deltat[:,0]
+    deltat = deltat.unsqueeze(-1).unsqueeze(-1).expand(-1, 2, 2)
+    Adt = A * deltat
+    eAdt = torch.matrix_exp(Adt)
+    eAdt = eAdt.unsqueeze(1).expand(-1, X.shape[1], -1, -1)
+    def test_exp():
+        ypred = eAdt@X.unsqueeze(-1)
+        ypred = ypred.squeeze(-1)
+        mse = criterion(ypred, y)
+    def compare_exp_mw():
+        mw = torch.load(f'probe_targets/{datatype}_{traintest}/mw_targets.pth')
+        mw_weights = torch.zeros(eAdt.shape)
+        mw_weights[:,:, 0, 0] = mw['mw_egtw00']
+        mw_weights[:, :, 0, 1] = mw['mw_egtw01']
+        mw_weights[:, :, 1, 0] = mw['mw_egtw10']
+        mw_weights[:, :, 1, 1] = mw['mw_egtw11']
+        print(mw_weights[1000,0])
+        print(eAdt[1000,0])
+
+
+    test_exp()
+    compare_exp_mw()
+
+
+
 def generate_lm_targets(datatype, traintest, maxdeg = 5):
     criterion = torch.nn.MSELoss()
     omegas, gammas, deltat, X, y, x, v = get_expanded_data(datatype, traintest)
@@ -206,7 +240,7 @@ def train_probe(input, output, modelpath, targetname, CL):
     return r2, mse, savepath
 
 
-def train_probes(my_task_id =1,num_tasks = 1):
+def train_probes(datatype, traintest, my_task_id =1,num_tasks = 1):
     if my_task_id is None:
         my_task_id = int(sys.argv[1])
     if num_tasks is None:
@@ -214,8 +248,14 @@ def train_probes(my_task_id =1,num_tasks = 1):
     
 
     #my_fnames = fnames[my_task_id:len(fnames):num_tasks]
-    df = pd.read_csv('dfs/underdamped_train_probetorun.csv', index_col = 0)
-    # get all indices in df 
+    df = pd.read_csv(f'dfs/{datatype}_{traintest}_probetorun.csv', index_col = 0)
+    # get all indices in df
+    print(len(df))
+    return
+    savedir = f'proberesults_{datatype}_{traintest}'
+    if savedir not in os.listdir('dfs/proberesults'):
+        os.mkdir(f'dfs/proberesults/{savedir}')
+    
     indices = list(df.index)
     my_indices = indices[my_task_id:len(indices):num_tasks]
     minidf = {key:[] for key in df.columns}
@@ -241,10 +281,10 @@ def train_probes(my_task_id =1,num_tasks = 1):
         minidf['p-r2'].append(r2)
         minidf['p-mse'].append(mse)
         minidf['p-savepath'].append(savepath)
-        if i % 1000 == 0:
-            minidfdf = pd.DataFrame(minidf)
-            minidfdf.to_csv(f'dfs/proberesults_{my_task_id}.csv')
-    minidfdf.to_csv(f'dfs/proberesults_{my_task_id}.csv')
+    
+    minidfdf = pd.DataFrame(minidf)
+    minidfdf.to_csv(f'dfs/proberesults/{savedir}/proberesults_{datatype}_{traintest}_{my_task_id}.csv')
+    #minidf.to_csv(f'dfs/proberesults/proberesults_{my_task_id}.csv')
 
 
     
@@ -273,9 +313,11 @@ if __name__ == '__main__':
 
     # train_probe(hs,targetval, modelpath, target, pCL)
     datatype, traintest = 'underdamped', 'train'
-    generate_rk_targets(datatype, traintest, maxdeg = 5)
-    generate_mw_targets(datatype, traintest)
-    generate_lm_targets(datatype, traintest, maxdeg = 5)
-    create_probe_model_df(datatype, traintest)
-    train_probes(my_task_id =None,num_tasks = None)
+    # generate_rk_targets(datatype, traintest, maxdeg = 5)
+    # generate_mw_targets(datatype, traintest)
+    # generate_lm_targets(datatype, traintest, maxdeg = 5)
+    # create_probetarget_df(datatype, traintest)
+    # create_probe_model_df(datatype, traintest)
+    #generate_exp_targets(datatype, traintest)
+    train_probes(datatype, traintest, my_task_id =1,num_tasks = 1000)
 
