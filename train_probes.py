@@ -113,11 +113,20 @@ def generate_exp_targets(datatype, traintest):
         mw_weights[:, :, 1, 0] = mw['mw_egtw10']
         mw_weights[:, :, 1, 1] = mw['mw_egtw11']
         print(mw_weights[1000,0])
-        print(eAdt[1000,0])
+    targets = {}
+    
 
-
+    targets['eAdt00'] = eAdt[:, :, 0, 0]
+    targets['eAdt01'] = eAdt[:, :, 0, 1]
+    targets['eAdt10'] = eAdt[:, :, 1, 0]
+    targets['eAdt11'] = eAdt[:, :, 1, 1]
+    targets['eAdt00x'] = targets['eAdt00'] * x
+    targets['eAdt01v'] = targets['eAdt01'] * v
+    targets['eAdt10x'] = targets['eAdt10'] * x
+    targets['eAdt11v'] = targets['eAdt11'] * v
     test_exp()
     compare_exp_mw()
+    save_probetargets(targets, f'eA_targets.pth', datatype, traintest)
 
 
 
@@ -172,12 +181,12 @@ def save_probetargets(targets, fname, datatype, traintest):
     torch.save(targets, f'{bigdir}/{dir}/{fname}')
 
 def create_probetarget_df(datatype, traintest):
-    methods = ['mw', 'rk', 'lm']
+    methods = ['mw', 'rk', 'lm', 'eA']
     probetargets = {'targetmethod':[], 'targetname':[], 'targetpath':[], 'deg': [],'datatype':[], 'traintest':[]}
     for method in methods:
         dir = f'probe_targets/{datatype}_{traintest}'
         fname = f'{method}_targets'
-        if not method == 'mw':
+        if not (method == 'mw' or method=='eA'):
             fname += '_deg5.pth'
         else: fname+='.pth'
         filepath = f'{dir}/{fname}'
@@ -186,7 +195,7 @@ def create_probetarget_df(datatype, traintest):
             probetargets['targetmethod'].append(method)
             probetargets['targetname'].append(key)
             probetargets['targetpath'].append(filepath)
-            if not method == 'mw':
+            if not (method == 'mw' or method=='eA'):
                 probetargets['deg'].append(key[-1])
             else: probetargets['deg'].append(None)
             probetargets['datatype'].append(datatype)
@@ -251,7 +260,7 @@ def train_probes(datatype, traintest, my_task_id =1,num_tasks = 1):
     df = pd.read_csv(f'dfs/{datatype}_{traintest}_probetorun.csv', index_col = 0)
     # get all indices in df
     print(len(df))
-    return
+
     savedir = f'proberesults_{datatype}_{traintest}'
     if savedir not in os.listdir('dfs/proberesults'):
         os.mkdir(f'dfs/proberesults/{savedir}')
@@ -316,8 +325,9 @@ if __name__ == '__main__':
     # generate_rk_targets(datatype, traintest, maxdeg = 5)
     # generate_mw_targets(datatype, traintest)
     # generate_lm_targets(datatype, traintest, maxdeg = 5)
-    # create_probetarget_df(datatype, traintest)
-    # create_probe_model_df(datatype, traintest)
-    #generate_exp_targets(datatype, traintest)
-    train_probes(datatype, traintest, my_task_id =1,num_tasks = 1000)
+    generate_exp_targets(datatype, traintest)
+    create_probetarget_df(datatype, traintest)
+    create_probe_model_df(datatype, traintest)
+
+    train_probes(datatype, traintest, my_task_id = None,num_tasks = None)
 
