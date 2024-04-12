@@ -98,3 +98,27 @@ def get_default_config():
     
     
     return C
+
+def linreg_config():
+    C = CfgNode()
+    # either model_type or (n_layer, n_head, n_embd) must be given in the config
+    C.model_type = 'gpt'
+    C.n_layer = 2
+    C.n_head = 1
+    C.n_embd =  16
+    C.in_dim = 1 # we probably don't need to project inputs to higher space but we can with this transformer
+    C.out_dim = C.in_dim # we just want one answer at the end
+
+
+    # I THINK NOT NECESSARY FOR US
+    C.vocab_size = None
+    C.block_size = 10
+    # dropout hyperparameters
+    C.embd_pdrop = 0
+    C.resid_pdrop = 0
+    C.attn_pdrop = 0
+    C.max_seq_length = 65*2
+
+    
+    
+    return C

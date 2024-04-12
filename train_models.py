@@ -3,10 +3,13 @@ import os
 from torch.utils.data import DataLoader, TensorDataset
 from model import Transformer
 from old_files.util import set_seed
-from config import get_default_config
+from config import get_default_config, linreg_config
 from tqdm import tqdm
 from data import generate_springdata, omega1to2, generate_dampedspringdata
 import sys
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(device)
 
 def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring', dir = 'models', batch_size = 64, num_epochs = 20000, lr = 0.001):
     set_seed(0)
@@ -21,6 +24,9 @@ def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring'
     if base not in os.listdir(dir):
         os.mkdir(f'{dir}/{base}')
 
+    if 'linreg' in fname:
+        traindata = traindata.unsqueeze(-1)
+        testdata = testdata.unsqueeze(-1)
 
     traindata = traindata[:,:CL+1,:] # only use 10 timesteps for transformer predictions. it's shown an ability to learn off of this.
     X, y = traindata[:,:-1,:], traindata[:,1:,:]
@@ -43,10 +49,10 @@ def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring'
     test_out_loader = DataLoader(test_out_dataset, batch_size=batch_size, shuffle=False)
 
     # Initialize the model
-    model = Transformer(config)
+    model = Transformer(config).to(device)
     if loadmodel:
         print(f'Loading model from {loadmodel}')
-        model.load_state_dict(torch.load(loadmodel))
+        model.load_state_dict(torch.load(loadmodel, map_location=device))
         for name, param in model.named_parameters():
             param.requires_grad = False 
 
@@ -67,15 +73,18 @@ def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring'
     test_in_losses = []
     test_out_losses = []
 
-
     for epoch in epoch_pbar:
         model.train()
         total_train_loss = 0
         
         for batch_X, batch_y in train_loader:
+            batch_X, batch_y = batch_X.to(device), batch_y.to(device)
             optimizer.zero_grad()
             output = model(batch_X)
-            loss = criterion(output, batch_y)    
+            if 'linreg' in fname:
+                loss = criterion(output[:, 0::2], batch_y[:,0::2])  # we only want the y values from model output.
+            else:
+                loss = criterion(output, batch_y)    
             loss.backward()
             optimizer.step()
 
@@ -91,10 +100,12 @@ def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring'
         total_test_out_loss = 0
         with torch.no_grad():
             for batch_X, batch_y in test_in_loader:
+                batch_X, batch_y = batch_X.to(device), batch_y.to(device)
                 output = model(batch_X)
                 loss = criterion(output, batch_y)
                 total_test_in_loss += loss.item()
             for batch_X, batch_y in test_out_loader:
+                batch_X, batch_y = batch_X.to(device), batch_y.to(device)
                 output = model(batch_X)
                 loss = criterion(output, batch_y)
                 total_test_out_loss += loss.item()
@@ -138,10 +149,12 @@ def train_many(Ls, Ws,title, traindata, testdata, CL, my_task_id, num_tasks):
         num_tasks = int(sys.argv[2])
     fnames = [(L,W) for L in Ls for W in Ws]
     my_fnames = fnames[my_task_id:len(fnames):num_tasks]
+    print(my_fnames)
     for L,W in my_fnames:
-        config = get_default_config()
+        config = linreg_config()#get_default_config()
         config.n_layer = L
         config.n_embd = W
+        config.max_seq_length = CL + 1
         train(config, traindata, testdata, fname = title, CL = CL)
 
 if __name__ == '__main__':
@@ -152,18 +165,22 @@ if __name__ == '__main__':
     # testdata = datadict['sequences_test']
     # testomegas = datadict['test_omegas']
     #generate_dampedspringdata(num_samples = 10000, sequence_length=65, plot = True)
-    datadict = torch.load('data/dampedspring_data.pth')
-    datatype = 'underdamped'
-    traindata1 = datadict[f'sequences_train_{datatype}']
-    traindata1 = traindata1[torch.randperm(traindata1.size()[0])]
-    testdata1 = datadict[f'sequences_test_{datatype}']
-    testdata1 = testdata1[torch.randperm(testdata1.size()[0])]
-    CL = 65
+    # datadict = torch.load('data/dampedspring_data.pth')
+    # datatype = 'underdamped'
+    # traindata1 = datadict[f'sequences_train_{datatype}']
+    # traindata1 = traindata1[torch.randperm(traindata1.size()[0])]
+    # testdata1 = datadict[f'sequences_test_{datatype}']
+    # testdata1 = testdata1[torch.randperm(testdata1.size()[0])]
+    datadict = torch.load('data/linreg1_data.pth')
+    traindata = datadict['traindata']
+    testdata = datadict['testdata']
+    CL = 2*65
     Ls = [1,2,3]
     Ws = [2,4,8,16]
-    my_task_id = None
-    num_tasks = None
-    train_many(Ls, Ws, datatype, traindata1, testdata1, CL, my_task_id, num_tasks)
+    my_task_id = 0
+    num_tasks = 1
+    title = 'linreg1'
+    train_many(Ls, Ws, title, traindata, testdata, CL, my_task_id, num_tasks)
     # traindata2 = datadict['sequences_train_overdamped']
     # traindata2 = traindata2[torch.randperm(traindata2.size()[0])]
     # testdata2 = datadict['sequences_test_overdamped']
