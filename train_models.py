@@ -2,7 +2,7 @@ import torch
 import os
 from torch.utils.data import DataLoader, TensorDataset
 from model import Transformer
-from old_files.util import set_seed
+from util import set_seed
 from config import get_default_config, linreg_config
 from tqdm import tqdm
 from data import generate_springdata, omega1to2, generate_dampedspringdata
@@ -12,7 +12,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(device)
 
 def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring', dir = 'models', batch_size = 64, num_epochs = 20000, lr = 0.001):
-    set_seed(0)
+    set_seed(10)
     if config is None:
         config = get_default_config() 
     base = f'{fname}_{config.n_embd}emb_{config.n_layer}layer'
