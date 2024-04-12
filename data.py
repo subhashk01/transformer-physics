@@ -247,12 +247,13 @@ def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = Fal
 def generate_linregdata(num_samples = 5000, sequence_length = 65):
     tlow, thigh = 0.75, 1
     # Generating a 5000x65 torch tensor with random values in specified ranges
-    x_test = torch.empty(num_samples, sequence_length).uniform_(-1, 1)  # Fill with values between -1 and 1 initially
+    num_test = num_samples//5
+    x_test = torch.empty(num_test, sequence_length).uniform_(-1, 1)  # Fill with values between -1 and 1 initially
     mask =x_test < 0  # Create a mask for negative values
     x_test[mask] = x_test[mask] * (thigh - tlow) - tlow  # Adjust negative values to be between -1 and -0.75
     x_test[~mask] = x_test[~mask] * (thigh - tlow) + tlow  # Adjust positive values to be between 0.75 and 1
     
-    w_test = torch.empty(num_samples,).uniform_(-1, 1)  # Fill with values between -1 and 1 initially
+    w_test = torch.empty(num_test,).uniform_(-1, 1)  # Fill with values between -1 and 1 initially
     mask = w_test < 0  # Create a mask for negative values
     w_test[mask] = w_test[mask] * (thigh - tlow) - tlow  # Adjust negative values to be between -1 and -0.75
     w_test[~mask] = w_test[~mask] * (thigh - tlow) + tlow  # Adjust positive values to be between 0.75 and 1
@@ -261,7 +262,7 @@ def generate_linregdata(num_samples = 5000, sequence_length = 65):
     x_test_exp = x_test.unsqueeze(2)  # Shape becomes (num_samples, sequence_length, 1)
     y_test_exp = y_test.unsqueeze(2)
     testdata = torch.cat((x_test_exp, y_test_exp), dim=2)
-    testdata = testdata.view(num_samples, -1)
+    testdata = testdata.view(num_test, -1)
 
     x_train = torch.empty(num_samples, sequence_length).uniform_(-1, 1)
     w_train = w_test = torch.empty(num_samples,).uniform_(-1, 1) 
@@ -271,7 +272,7 @@ def generate_linregdata(num_samples = 5000, sequence_length = 65):
     y_train_exp = y_train.unsqueeze(2)
     traindata = torch.cat((x_train_exp, y_train_exp), dim=2)
     traindata = traindata.view(num_samples, -1)
-    print(testdata.shape)
+
     
     torch.save({
         'x_train': x_train,

@@ -177,8 +177,8 @@ if __name__ == '__main__':
     CL = 2*65
     Ls = [1,2,3]
     Ws = [2,4,8,16]
-    my_task_id = 0
-    num_tasks = 1
+    my_task_id = None
+    num_tasks = None
     title = 'linreg1'
     train_many(Ls, Ws, title, traindata, testdata, CL, my_task_id, num_tasks)
     # traindata2 = datadict['sequences_train_overdamped']
