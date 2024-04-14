@@ -1,4 +1,4 @@
-from config import get_default_config
+from config import get_default_config, linreg_config
 from model import Transformer
 import torch
 import numpy as np
@@ -14,12 +14,17 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 
-def load_model(df_row):
+def load_model(df_row, datatype):
     # expects row from model dataframe
-    config = get_default_config()
+    if 'linreg' in datatype:
+        config = linreg_config()
+        config.max_seq_length = df_row['CL']+1
+    else:
+        config = get_default_config()
+        config.max_seq_length = df_row['CL']
     config.n_embd = df_row['emb']
     config.n_layer = df_row['layer']
-    config.max_seq_length = df_row['CL']
+    
     file = df_row['modelpath']
 
     model = Transformer(config)
@@ -29,6 +34,11 @@ def load_model(df_row):
     return model
 
 def get_data(datatype = 'underdamped', traintest = 'train'):
+    if 'linreg' in datatype:
+        datadict = torch.load('data/linreg1_data.pth')
+        data = datadict[f'{traintest}data'].unsqueeze(-1)
+        weights = datadict[f'w_{traintest}']
+        return weights, data
     data = torch.load('data/dampedspring_data.pth')
     gammas = data[f'gammas_{traintest}_{datatype}']
     omegas = data[f'omegas_{traintest}_{datatype}']

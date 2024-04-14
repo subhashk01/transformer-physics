@@ -150,8 +150,9 @@ class Transformer(nn.Module):
             diff = seq_length - self.max_seq_length
             extra_pos = torch.zeros(diff, self.n_embed, device=x.device)
             pos_embeddings = torch.cat((self.positional_embeddings, extra_pos), dim=0)
-            
+        
         pos_embeddings = self.positional_embeddings[positions]
+        print(x.shape, 'x in model')
 
         x = self.l_in(x)
         x = x + pos_embeddings  # Add positional embeddings to input embeddings

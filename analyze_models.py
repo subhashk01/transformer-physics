@@ -37,7 +37,8 @@ def get_model_df():
                 models['epoch'].append(int(epoch))
                 models['modelpath'].append(filename)
             else:
-                print("No match found in file:", filename)
+                continue
+                #print("No match found in file:", filename)
     df = pd.DataFrame(models)
     # sort df by layers and emb
     df = df.sort_values(by=['layer', 'emb'])
@@ -46,10 +47,19 @@ def get_model_df():
 def plot_ICL(modeldf, datatype = 'underdamped', traintest = 'train'):
     plt.figure(figsize = (10,10))
     for index, row in modeldf.iterrows():
-        model = load_model(row)
-        _, _, sequences, _, _ = get_data(datatype, traintest)
-        X, y = sequences[:, :-1], sequences[:, 1:]
-        ypred = model(X)
+        model = load_model(row, datatype)
+        if 'linreg' in datatype:
+            _, sequences = get_data(datatype, traintest)
+            X, y = sequences[:, :-1], sequences[:, 1:]
+            print(X.shape, 'X here')
+            ypred = model(X)
+            y, ypred = y[:, 0::2], ypred[:, 0::2]
+        else:
+            _, _, sequences, _, _ = get_data(datatype, traintest)
+            X, y = sequences[:, :-1], sequences[:, 1:]
+            print(X.shape, 'X here')
+            ypred = model(X)
+            return
         CLs = range(1, y.shape[1])
         mses = ((ypred - y)**2).mean(dim=2).detach().numpy()    
         mses = [mses[:,:i].mean() for i in CLs]
@@ -67,7 +77,7 @@ def get_model_hs_df(modeldf, datatype = 'underdamped', traintest = 'train'):
     #gets hidden states for all models in modeldf, saves them, and returns a dataframe
     # with full data
     # saves hidden states for model with model. need to index layer and in layer position still. 
-    hsdf  ={f'm-{key}':[] for key in modeldf.columns}
+    hsdf  = {f'm-{key}':[] for key in modeldf.columns}
     hsdf['h-hspath'] = []
     hsdf['h-layerpos'] = []
     hsdf['h-inlayerpos'] = []
@@ -75,10 +85,13 @@ def get_model_hs_df(modeldf, datatype = 'underdamped', traintest = 'train'):
     hsdf['h-traintest'] = []
     for index, row in modeldf.iterrows():
         print(row['modelpath'])
-        model = load_model(row)
-        _, _, sequences, _, _ = get_data(datatype, traintest)
-        X, y = sequences[:, :-1], sequences[:, 1:]
-        ypred, hs = model.forward_hs(X)
+        model = load_model(row, datatype)
+        if 'linreg1' in datatype:
+            _, sequences = get_data(datatype, traintest)
+        else:
+            _, _, sequences, _, _ = get_data(datatype, traintest)
+        X, _ = sequences[:, :-1], sequences[:, 1:]
+        _, hs = model.forward_hs(X)
         savepath = row['modelpath'][:-4]+'_hss.pth'
         for layer in hs:
             for inlayerpos in hs[layer]:
@@ -92,10 +105,15 @@ def get_model_hs_df(modeldf, datatype = 'underdamped', traintest = 'train'):
         torch.save(hs, savepath)
     hsdf = pd.DataFrame(hsdf)
     hsdf.to_csv(f'dfs/{datatype}_{traintest}_model_hss.csv')
-
+    return hsdf
         
 if __name__ == '__main__':
     df = get_model_df()
     df = df[df['epoch'] == 20000]
-    get_model_hs_df(df)
+    df = df[df['datatype'] == 'linreg1']
+    # df = df[df['emb'] == 16]
+    # df = df[df['layer'] == 2]
+    #plot_ICL(df, datatype = 'linreg1', traintest = 'train')
+    get_model_hs_df(df, datatype = 'linreg1cca', traintest = 'train')
+    #get_model_hs_df(df)
     #plot_ICL(df, datatype = 'overdamped', traintest = 'test')

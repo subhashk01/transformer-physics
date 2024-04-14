@@ -6,6 +6,10 @@ import pandas as pd
 from sklearn.linear_model import Ridge
 import time
 import sys
+from sklearn.cross_decomposition import CCA
+from sklearn.metrics import mean_squared_error
+import numpy as np
+from analyze_models import get_model_hs_df, get_model_df
 
 def get_expanded_data(datatype, traintest):
     gammas, omegas, sequences, times, deltat = get_data(datatype, traintest)
@@ -173,6 +177,46 @@ def generate_lm_targets(datatype, traintest, maxdeg = 5):
     fname = f'lm_targets_deg{maxdeg}.pth'
     save_probetargets(targets, fname, datatype, traintest)
 
+def generate_lr_targets(datatype = 'linreg1', traintest = 'train'):
+    # makes targets for linreg model, which are w, wx
+    # ONLY WORKS FOR 1D W
+    criterion = torch.nn.MSELoss()
+    w, sequences = get_data(datatype, traintest)
+    X, y = sequences[:,:-1], sequences[:,1:]
+    X, y = X.squeeze(-1), y.squeeze(-1)
+    w = w.repeat(X.shape[1], 1).T
+    targets = {}
+    for i in range(1, 6):
+        targets[f'lr_w{i}'] = w**i
+        targets[f'lr_w{i}x'] = targets[f'lr_w{i}'] * X
+    
+    x = X[:,0::2]
+    y = y[:,0::2]
+    w = w[:,0::2]
+    # make w same size as X
+    ypred = w*x
+    loss = criterion(ypred, y)
+    print(f'prediction loss: {loss}')
+    save_probetargets(targets, 'lr_targets.pth', datatype, traintest)
+    return targets
+
+def generate_lr_cca_targets(datatype = 'linreg1cca', traintest = 'train', maxdeg = 5):
+    w, sequences = get_data(datatype, traintest)
+    X, y = sequences[:,:-1], sequences[:,1:]
+    X, y = X.squeeze(-1), y.squeeze(-1)
+    w = w.repeat(X.shape[1], 1).T
+    wpow = torch.zeros((w.shape[0], w.shape[1], maxdeg))
+    wxpow = torch.zeros(wpow.shape)
+    for deg in range(1, maxdeg+1):
+        wpow[:, :, deg - 1] = w**deg
+        wxpow[:, :, deg - 1] = wpow[:, :, deg - 1] * X
+    targets = {}
+    targets['lr_wpow'] = wpow
+    targets['lr_wxpow'] = wxpow
+    save_probetargets(targets, f'lr_cca_targets_deg{maxdeg}.pth', datatype, traintest)
+
+
+
 def save_probetargets(targets, fname, datatype, traintest):
     bigdir = 'probe_targets'
     dir = f'{datatype}_{traintest}'
@@ -181,12 +225,15 @@ def save_probetargets(targets, fname, datatype, traintest):
     torch.save(targets, f'{bigdir}/{dir}/{fname}')
 
 def create_probetarget_df(datatype, traintest):
-    methods = ['mw', 'rk', 'lm', 'eA']
+    allmethods = {'underdamped': ['mw', 'rk', 'lm', 'eA'],
+                  'linreg1': ['lr'],
+                  'linreg1cca': ['lr_cca']}
     probetargets = {'targetmethod':[], 'targetname':[], 'targetpath':[], 'deg': [],'datatype':[], 'traintest':[]}
-    for method in methods:
+    nodegmethods = ['mw', 'eA', 'lr']
+    for method in allmethods[datatype]:
         dir = f'probe_targets/{datatype}_{traintest}'
         fname = f'{method}_targets'
-        if not (method == 'mw' or method=='eA'):
+        if not method in nodegmethods:
             fname += '_deg5.pth'
         else: fname+='.pth'
         filepath = f'{dir}/{fname}'
@@ -195,7 +242,7 @@ def create_probetarget_df(datatype, traintest):
             probetargets['targetmethod'].append(method)
             probetargets['targetname'].append(key)
             probetargets['targetpath'].append(filepath)
-            if not (method == 'mw' or method=='eA'):
+            if not method in nodegmethods:
                 probetargets['deg'].append(key[-1])
             else: probetargets['deg'].append(None)
             probetargets['datatype'].append(datatype)
@@ -212,25 +259,28 @@ def create_probe_model_df(datatype, traintest):
         keys.append(f'p-{pkey}')
     keys.append('p-CL')
     df = {key:[] for key in keys}
-    omegas, gammas, deltat, X, y, x, v = get_expanded_data(datatype, traintest)
+    if 'linreg' in datatype:
+        _, sequences = get_data(datatype, traintest)
+        X, y = sequences[:, :-1], sequences[:, 1:]
+    else: # spring data
+        omegas, gammas, deltat, X, y, x, v = get_expanded_data(datatype, traintest)
     for mindex, mrow in model_hs.iterrows():
         for pindex, prow in probetargets.iterrows():
             print(mindex, pindex)
             for CL in range(X.shape[1]):
+                if 'linreg' in datatype:
+                    if CL % 2 == 1:
+                        continue # only want even CLs, where predictions happen
                 for mkey in model_hs.columns:
                     df[mkey].append(mrow[mkey])
                 for pkey in probetargets.columns:
                     df[f'p-{pkey}'].append(prow[pkey])
                 df['p-CL'].append(CL)
     df = pd.DataFrame(df)
-    # save df
     df.to_csv(f'dfs/{datatype}_{traintest}_probetorun.csv')
+    return df
 
-
-
-def train_probe(input, output, modelpath, targetname, CL):
-    # assumes modelname doesnt have .pth
-    input, output = input.detach().numpy(), output.detach().numpy()
+def get_savepath(modelpath, targetname, layer, inlayerpos, CL, append = ''):
     modelname = modelpath[modelpath.rfind('/')+1:-4]
     mdir = f'probes/{modelname}'
     if modelname not in os.listdir('probes'):
@@ -238,7 +288,17 @@ def train_probe(input, output, modelpath, targetname, CL):
     totaldir = f'{mdir}/{targetname}'
     if targetname not in os.listdir(mdir):
         os.mkdir(totaldir)
-    savepath = totaldir+'/' + f'{CL}.pth'
+    fname = f'{targetname}_{layer}layer_{inlayerpos}_{CL}CL'
+    if len(append):
+        fname = f'{fname}_{append}'
+    savepath = f'{totaldir}/{fname}.pth'
+    return savepath
+
+
+def train_probe(input, output, savepath):
+    # assumes modelname doesnt have .pth
+    input, output = input.detach().numpy(), output.detach().numpy()
+    
     clf = Ridge(alpha=1.0)
     clf.fit(input, output)
     # save clf
@@ -246,10 +306,10 @@ def train_probe(input, output, modelpath, targetname, CL):
     r2 = clf.score(input, output)
     # get mse
     mse = ((output - clf.predict(input))**2).mean()
-    return r2, mse, savepath
+    return r2, mse
 
 
-def train_probes(datatype, traintest, my_task_id =1,num_tasks = 1):
+def train_probes(datatype, traintest, my_task_id =0,num_tasks = 1):
     if my_task_id is None:
         my_task_id = int(sys.argv[1])
     if num_tasks is None:
@@ -273,7 +333,7 @@ def train_probes(datatype, traintest, my_task_id =1,num_tasks = 1):
     minidf['p-savepath'] = []
 
     for i, index in enumerate(my_indices):
-        print(index)
+        print(i)
         row = df.iloc[index]
         pCL = row['p-CL']
         layer = row['h-layerpos']
@@ -284,7 +344,8 @@ def train_probes(datatype, traintest, my_task_id =1,num_tasks = 1):
         targetpath = row['p-targetpath']
         targetval = torch.load(targetpath)[target][:, pCL]
         modelpath = row['m-modelpath']
-        r2, mse, savepath = train_probe(hs,targetval, modelpath, target, pCL)
+        savepath = get_savepath(modelpath, target, layer, inlayerpos, pCL)
+        r2, mse = train_probe(hs,targetval, savepath)
         for key in df.columns:
             minidf[key].append(row[key])
         minidf['p-r2'].append(r2)
@@ -295,8 +356,65 @@ def train_probes(datatype, traintest, my_task_id =1,num_tasks = 1):
     minidfdf.to_csv(f'dfs/proberesults/{savedir}/proberesults_{datatype}_{traintest}_{my_task_id}.csv')
     #minidf.to_csv(f'dfs/proberesults/proberesults_{my_task_id}.csv')
 
+def train_cca_probe(input, output, savepath):
+    input, output = input.detach().numpy(), output.detach().numpy()
+    cca = CCA(n_components=1)
+    cca.fit(input, output)
+    torch.save(cca, savepath)
+    X_c, Y_c = cca.transform(input, output)
+    canonical_correlations = np.corrcoef(X_c.T, Y_c.T).diagonal(offset=X_c.shape[1])
+    r2 = canonical_correlations**2
+    mse = mean_squared_error(X_c, Y_c)
+    return r2[0], mse
+
+
+def train_cca_probes(datatype, traintest, maxdeg, my_task_id =0,num_tasks = 1):
+    if my_task_id is None:
+        my_task_id = int(sys.argv[1])
+    if num_tasks is None:
+        num_tasks = int(sys.argv[2])
+
+    df = pd.read_csv(f'dfs/{datatype}_{traintest}_probetorun.csv', index_col = 0)
+    # get all indices in df
+
+    savedir = f'proberesults_{datatype}_{traintest}'
+    if savedir not in os.listdir('dfs/proberesults'):
+        os.mkdir(f'dfs/proberesults/{savedir}')
+    
+    indices = list(df.index)
+    my_indices = indices[my_task_id:len(indices):num_tasks]
+    minidf = {key:[] for key in df.columns}
+    minidf['cca-r2'] = []
+    minidf['cca-deg'] = []
+    minidf['cca-mse'] = []
+    minidf['cca-savepath'] = []
+    
+
+    for i, index in enumerate(my_indices):
+        for deg in range(1, maxdeg+1):
+            row = df.iloc[index]
+            pCL = row['p-CL']
+            layer = row['h-layerpos']
+            inlayerpos = row['h-inlayerpos']
+            hss = torch.load(row['h-hspath'])
+            hs = hss[layer][inlayerpos][:, pCL]
+            target = row['p-targetname']
+            targetpath = row['p-targetpath']
+            targetval = torch.load(targetpath)[target][:, pCL, :deg]
+            modelpath = row['m-modelpath']
+            savepath = get_savepath(modelpath, target, layer, inlayerpos, pCL, append = f'deg{deg}')
+            r2, mse = train_cca_probe(hs,targetval, savepath)
+            print(f'{index}: layer {layer}, inlayer {inlayerpos}, CL {pCL}|  {target}, deg{deg}, R^2 = {r2:.3f}')
+            for key in df.columns:
+                minidf[key].append(row[key])
+            minidf['cca-r2'].append(r2)
+            minidf['cca-mse'].append(mse)
+            minidf['cca-deg'].append(deg)
+            minidf['cca-savepath'].append(savepath)
 
     
+    minidfdf = pd.DataFrame(minidf)
+    minidfdf.to_csv(f'dfs/proberesults/{savedir}/proberesults_{datatype}_{traintest}_{my_task_id}.csv')
     
 
 
@@ -321,13 +439,47 @@ if __name__ == '__main__':
     # modelpath = row['m-modelpath']
 
     # train_probe(hs,targetval, modelpath, target, pCL)
-    datatype, traintest = 'underdamped', 'train'
+    df = get_model_df()
+    df = df[df['epoch'] == 20000]
+    lrdf = df[df['datatype'] == 'linreg1']
+    my_task_id, num_tasks = 0,1
+
+    datatype, traintest = 'linreg1', 'train'
+    print(len(lrdf))
+    lrhsdf = get_model_hs_df(lrdf, datatype = datatype, traintest = traintest)
+    print(len(lrhsdf))
+    generate_lr_targets(datatype, traintest)
+    create_probetarget_df(datatype, traintest)
+    lrpdf = create_probe_model_df(datatype, traintest)
+    train_probes(datatype, traintest, my_task_id = my_task_id, num_tasks = num_tasks)
+
+    datatype, traintest = 'linreg1cca', 'train'
+    print(len(lrdf))
+    lrhsdf = get_model_hs_df(lrdf, datatype = datatype, traintest = traintest)
+    print(len(lrhsdf))
+    generate_lr_cca_targets(datatype, traintest)
+    create_probetarget_df(datatype, traintest)
+    lrpdf = create_probe_model_df(datatype, traintest)
+    train_cca_probes(datatype, traintest, maxdeg = 5, my_task_id = my_task_id, num_tasks = num_tasks)
+
+
     # generate_rk_targets(datatype, traintest, maxdeg = 5)
     # generate_mw_targets(datatype, traintest)
     # generate_lm_targets(datatype, traintest, maxdeg = 5)
-    generate_exp_targets(datatype, traintest)
-    create_probetarget_df(datatype, traintest)
-    create_probe_model_df(datatype, traintest)
+    
+    # generate_lr_cca_targets(datatype, traintest)
+    # create_probetarget_df(datatype, traintest)
+    # df = create_probe_model_df(datatype, traintest)
+    # print(len(df))
+    # print(df.columns)
+    # print(df['p-targetname'].unique())
+    # print(df['p-deg'].unique())
+    # train_cca_probes(datatype, traintest, 5)
+    # print(len(df), 'DATAFRAME LENGTH')
+    # train_probes(datatype, traintest)
+    # generate_exp_targets(datatype, traintest)
+    # create_probetarget_df(datatype, traintest)
+    # create_probe_model_df(datatype, traintest)
 
-    train_probes(datatype, traintest, my_task_id = None,num_tasks = None)
+    #train_probes(datatype, traintest, my_task_id = None,num_tasks = None)
 
