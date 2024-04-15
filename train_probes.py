@@ -334,6 +334,7 @@ def train_probes(datatype, traintest, my_task_id =0,num_tasks = 1):
 
     for i, index in enumerate(my_indices):
         print(i)
+        continue
         row = df.iloc[index]
         pCL = row['p-CL']
         layer = row['h-layerpos']
@@ -392,6 +393,8 @@ def train_cca_probes(datatype, traintest, maxdeg, my_task_id =0,num_tasks = 1):
 
     for i, index in enumerate(my_indices):
         for deg in range(1, maxdeg+1):
+            print(i, deg)
+            continue
             row = df.iloc[index]
             pCL = row['p-CL']
             layer = row['h-layerpos']
@@ -446,8 +449,8 @@ if __name__ == '__main__':
 
     datatype, traintest = 'linreg1', 'train'
     print(len(lrdf))
-    lrhsdf = get_model_hs_df(lrdf, datatype = datatype, traintest = traintest)
-    print(len(lrhsdf))
+    #lrhsdf = get_model_hs_df(lrdf, datatype = datatype, traintest = traintest)
+    #print(len(lrhsdf))
     generate_lr_targets(datatype, traintest)
     create_probetarget_df(datatype, traintest)
     lrpdf = create_probe_model_df(datatype, traintest)
@@ -455,8 +458,8 @@ if __name__ == '__main__':
 
     datatype, traintest = 'linreg1cca', 'train'
     print(len(lrdf))
-    lrhsdf = get_model_hs_df(lrdf, datatype = datatype, traintest = traintest)
-    print(len(lrhsdf))
+    #lrhsdf = get_model_hs_df(lrdf, datatype = datatype, traintest = traintest)
+    #print(len(lrhsdf))
     generate_lr_cca_targets(datatype, traintest)
     create_probetarget_df(datatype, traintest)
     lrpdf = create_probe_model_df(datatype, traintest)
