@@ -98,20 +98,33 @@ class Block(nn.Module):
         self.mlpf = lambda x: m.dropout(m.c_proj(m.act(m.c_fc(x)))) # feed forward layer. just fancy shmancy syntax, very basic tho
 
 
-    def forward(self, x, layernorm = False, return_hs = False):
+    def forward(self, x, layernorm = False, return_hs = False, insert = {}):
         #BIMT doesnt use layernorm. allegeldy hurts interpretability. here we give ourselves the option to use it
+        #insert is where we can insert our own attention or mlp values. this is for interpretability
+        # assumes insert is a dictionary of {'inlayerpos': {pCL: value}}
+        def replace(x, key):
+            if key in insert:
+                for CL in insert[key].keys():
+                    print(key)
+                    x[:, CL] = torch.tensor(insert[key][CL])
+            return x
         hs = {}
         if layernorm:
             x = self.ln1(x)
         attn = self.attn(x)
         hs['attn'] = attn.clone().detach()
+        replace(attn, 'attn')
         x = x + attn
+        replace(x, 'attn-res')
         hs['attn-res'] = x.clone().detach()
         if layernorm:
             x = x + self.mlpf(self.ln2(x))
+
         mlpx = self.mlpf(x)
         hs['mlp'] = mlpx.clone().detach()
+        replace(mlpx, 'mlp')
         x = x + mlpx
+        replace(x, 'mlp-res')
         hs['mlp-res'] = x.clone().detach()
         if return_hs:
             return x, hs
@@ -141,7 +154,7 @@ class Transformer(nn.Module):
         total_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         print(f'Total number of parameters: {total_params}')
 
-    def forward(self, x, layernorm=False):
+    def forward(self, x, layernorm=False, insertall = {}):
         # Add positional embeddings
         seq_length = x.size(1)
         positions = torch.arange(0, seq_length, dtype=torch.long, device=x.device)
@@ -152,13 +165,16 @@ class Transformer(nn.Module):
             pos_embeddings = torch.cat((self.positional_embeddings, extra_pos), dim=0)
         
         pos_embeddings = self.positional_embeddings[positions]
-        print(x.shape, 'x in model')
 
         x = self.l_in(x)
         x = x + pos_embeddings  # Add positional embeddings to input embeddings
 
         for i in range(self.n_layer):
-            x = self.blocks[i](x, layernorm)
+            insert = {}
+            layer = i+1
+            if layer in insertall:
+                insert = insertall[layer]
+            x = self.blocks[i](x, layernorm = layernorm, insert = insert)
         if layernorm:
             x = self.ln_f(x)
         y = self.l_out(x)

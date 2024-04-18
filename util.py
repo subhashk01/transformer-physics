@@ -26,12 +26,17 @@ def load_model(df_row, datatype):
     config.n_layer = df_row['layer']
     
     file = df_row['modelpath']
+    return load_model_file(file, config)
 
+def load_model_file(file, config):
     model = Transformer(config)
     model_state = torch.load(file)
     model.load_state_dict(model_state)
     model.eval()
     return model
+  
+    
+
 
 def get_data(datatype = 'underdamped', traintest = 'train'):
     if 'linreg' in datatype:
@@ -47,18 +52,24 @@ def get_data(datatype = 'underdamped', traintest = 'train'):
     deltat = times[:, 1] - times[:, 0]
     return gammas, omegas, sequences, times, deltat
 
-def get_log_log_linear(x,y):
+def get_log_log_linear(x,y, return_mse = False):
     # gets the lienar relationship between logx and logy
     xlog = np.log(x)
     ylog = np.log(y)
     slope, intercept, r_value, p_value, std_err = linregress(xlog, ylog)
+    if return_mse:
+        # Predict ylog using the linear model
+        ylog_pred = slope * xlog + intercept
+        # Calculate MSE
+        mse = np.mean((ylog - ylog_pred) ** 2)
+        return slope, intercept, r_value, mse
     return slope, intercept, r_value
 
 def get_model_df(df, layer, emb):
     df_model = df[(df['m-layer'] == layer) & (df['m-emb'] == emb)]
     return df_model
-def hello():
-    print('hello')
+
+
 
 def get_targetmethod_df(df, targetmethod):
     df_targetmethod = df[df['p-targetmethod'] == targetmethod]

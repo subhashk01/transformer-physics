@@ -46,6 +46,7 @@ def get_model_df():
 
 def plot_ICL(modeldf, datatype = 'underdamped', traintest = 'train'):
     plt.figure(figsize = (10,10))
+    data = {}
     for index, row in modeldf.iterrows():
         model = load_model(row, datatype)
         if 'linreg' in datatype:
@@ -59,19 +60,22 @@ def plot_ICL(modeldf, datatype = 'underdamped', traintest = 'train'):
             X, y = sequences[:, :-1], sequences[:, 1:]
             print(X.shape, 'X here')
             ypred = model(X)
-            return
-        CLs = range(1, y.shape[1])
-        mses = ((ypred - y)**2).mean(dim=2).detach().numpy()    
-        mses = [mses[:,:i].mean() for i in CLs]
+        CLs = range(1, y.shape[1]+1)
+        mses = ((ypred - y)**2).mean(dim=2).detach()
+        mses = mses.mean(dim=0).numpy()
+        #print(mses.shape)
+        #mses = [mses[:,:i].mean() for i in CLs]
         slope, intercept, r_value = get_log_log_linear(CLs, mses)
-        plt.plot(CLs, mses, label = f'{row["emb"]}emb_{row["layer"]}layer: log(MSE) = {slope:.2f}log(CL) + {intercept:.2f}, R^2 = {r_value**2:.2f}')
+        plt.plot(CLs, mses, label = f'{row["emb"]}emb_{row["layer"]}layer: log(MSE) = {slope:.4f}log(CL) + {intercept:.2f}, R^2 = {r_value**2:.2f}')
+        data[(row['emb'], row['layer'])] = mses
     plt.xlabel("CL")
     plt.ylabel("MSE")
     plt.yscale('log')
-    plt.xscale('log')
+    #plt.xscale('log')
     plt.title(f'MSE vs Context Length for {datatype} {traintest} data')
     plt.legend()
     plt.show()
+    return data, CLs
 
 def get_model_hs_df(modeldf, datatype = 'underdamped', traintest = 'train'):
     #gets hidden states for all models in modeldf, saves them, and returns a dataframe
@@ -111,9 +115,10 @@ if __name__ == '__main__':
     df = get_model_df()
     df = df[df['epoch'] == 20000]
     df = df[df['datatype'] == 'linreg1']
+    print(df)
     # df = df[df['emb'] == 16]
     # df = df[df['layer'] == 2]
-    #plot_ICL(df, datatype = 'linreg1', traintest = 'train')
-    get_model_hs_df(df, datatype = 'linreg1cca', traintest = 'train')
+    plot_ICL(df, datatype = 'linreg1', traintest = 'test')
+    #get_model_hs_df(df, datatype = 'linreg1cca', traintest = 'train')
     #get_model_hs_df(df)
     #plot_ICL(df, datatype = 'overdamped', traintest = 'test')

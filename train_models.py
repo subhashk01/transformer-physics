@@ -143,12 +143,13 @@ def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring'
     
     return model
 
-def train_many(Ls, Ws,title, traindata, testdata, CL, my_task_id, num_tasks):
+def train_many(LWs, title, traindata, testdata, CL, my_task_id, num_tasks):
+    #LWs is a list of tuples of (L,W) values to train on
     if my_task_id is None:
         my_task_id = int(sys.argv[1])
     if num_tasks is None:
         num_tasks = int(sys.argv[2])
-    fnames = [(L,W) for L in Ls for W in Ws]
+    fnames = LWs
     my_fnames = fnames[my_task_id:len(fnames):num_tasks]
     print(my_fnames)
     for L,W in my_fnames:
@@ -156,6 +157,7 @@ def train_many(Ls, Ws,title, traindata, testdata, CL, my_task_id, num_tasks):
         config.n_layer = L
         config.n_embd = W
         config.max_seq_length = CL + 1
+        return
         train(config, traindata, testdata, fname = title, CL = CL)
 
 if __name__ == '__main__':
@@ -176,12 +178,23 @@ if __name__ == '__main__':
     traindata = datadict['traindata']
     testdata = datadict['testdata']
     CL = 2*65
+    Ls = [4,5]
+    Ws = [2,4,8,16,32,64]
+    LWs = []
+    for L in Ls:
+        for W in Ws:
+            LWs.append((L,W))
     Ls = [1,2,3]
-    Ws = [2,4,8,16]
+    Ws = [32,64]
+    for L in Ls:
+        for W in Ws:
+            LWs.append((L,W))
+    print(len(LWs))
     my_task_id = 0
-    num_tasks = 1
+    num_tasks = 18
     title = 'linreg1'
-    train_many(Ls, Ws, title, traindata, testdata, CL, my_task_id, num_tasks)
+    
+    train_many(LWs, title, traindata, testdata, CL, my_task_id, num_tasks)
     # traindata2 = datadict['sequences_train_overdamped']
     # traindata2 = traindata2[torch.randperm(traindata2.size()[0])]
     # testdata2 = datadict['sequences_test_overdamped']

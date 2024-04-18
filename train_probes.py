@@ -189,6 +189,7 @@ def generate_lr_targets(datatype = 'linreg1', traintest = 'train'):
     for i in range(1, 6):
         targets[f'lr_w{i}'] = w**i
         targets[f'lr_w{i}x'] = targets[f'lr_w{i}'] * X
+        targets[f'lr_w{i}x{i}'] = targets[f'lr_w{i}'] * X**i
     
     x = X[:,0::2]
     y = y[:,0::2]
@@ -200,21 +201,33 @@ def generate_lr_targets(datatype = 'linreg1', traintest = 'train'):
     save_probetargets(targets, 'lr_targets.pth', datatype, traintest)
     return targets
 
-def generate_lr_cca_targets(datatype = 'linreg1cca', traintest = 'train', maxdeg = 5):
+def generate_lr_cca_targets(datatype = 'linreg1cca', traintest = 'train', maxdeg = 5, save = True):
     w, sequences = get_data(datatype, traintest)
     X, y = sequences[:,:-1], sequences[:,1:]
     X, y = X.squeeze(-1), y.squeeze(-1)
     w = w.repeat(X.shape[1], 1).T
     wpow = torch.zeros((w.shape[0], w.shape[1], maxdeg))
+    wpowx = torch.zeros(wpow.shape)
     wxpow = torch.zeros(wpow.shape)
     for deg in range(1, maxdeg+1):
         wpow[:, :, deg - 1] = w**deg
-        wxpow[:, :, deg - 1] = wpow[:, :, deg - 1] * X
+        wpowx[:, :, deg - 1] = wpow[:, :, deg - 1] * X
+        wxpow[:, :, deg - 1] = wpow[:, :, deg - 1] * X**deg
     targets = {}
     targets['lr_wpow'] = wpow
+    targets['lr_wpowx'] = wpowx
     targets['lr_wxpow'] = wxpow
-    save_probetargets(targets, f'lr_cca_targets_deg{maxdeg}.pth', datatype, traintest)
+    if save:
+        save_probetargets(targets, f'lr_cca_targets_deg{maxdeg}.pth', datatype, traintest)
+    return targets
 
+def generate_reverselr_targets(datatype = 'rlinreg1', traintest = 'train'):
+    ccatargets = generate_lr_cca_targets(datatype, traintest, save = False)
+    rlr_targets = {}
+    rlr_targets['rlr_wi2'] = ccatargets['lr_wpow'][:, :, :2]
+    # rlr_targets['rlr_wi1'] = ccatargets['lr_wpow'][:, :, :1]
+    # rlr_targets['rlr_wix2'] = ccatargets['lr_wpowx'][:, :, :2]
+    save_probetargets(rlr_targets, 'rlr_targets.pth', datatype, traintest)
 
 
 def save_probetargets(targets, fname, datatype, traintest):
@@ -224,12 +237,13 @@ def save_probetargets(targets, fname, datatype, traintest):
         os.mkdir(f'{bigdir}/{dir}')
     torch.save(targets, f'{bigdir}/{dir}/{fname}')
 
-def create_probetarget_df(datatype, traintest):
+def create_probetarget_df(datatype, traintest, save = True, reverse = False):
     allmethods = {'underdamped': ['mw', 'rk', 'lm', 'eA'],
                   'linreg1': ['lr'],
-                  'linreg1cca': ['lr_cca']}
+                  'linreg1cca': ['lr_cca'],
+                  'rlinreg1': ['rlr']}
     probetargets = {'targetmethod':[], 'targetname':[], 'targetpath':[], 'deg': [],'datatype':[], 'traintest':[]}
-    nodegmethods = ['mw', 'eA', 'lr']
+    nodegmethods = ['mw', 'eA', 'lr', 'rlr']
     for method in allmethods[datatype]:
         dir = f'probe_targets/{datatype}_{traintest}'
         fname = f'{method}_targets'
@@ -242,18 +256,26 @@ def create_probetarget_df(datatype, traintest):
             probetargets['targetmethod'].append(method)
             probetargets['targetname'].append(key)
             probetargets['targetpath'].append(filepath)
-            if not method in nodegmethods:
+            if not method in nodegmethods or method=='rlr':
                 probetargets['deg'].append(key[-1])
             else: probetargets['deg'].append(None)
             probetargets['datatype'].append(datatype)
             probetargets['traintest'].append(traintest)
     df = pd.DataFrame(probetargets)
     # save df
-    df.to_csv(f'dfs/{datatype}_{traintest}_probetargets.csv')
+    if reverse:
+        df.to_csv(f'dfs/{datatype}_{traintest}_reverseprobetargets.csv')
+    else:
+        df.to_csv(f'dfs/{datatype}_{traintest}_probetargets.csv')
+    return df
 
-def create_probe_model_df(datatype, traintest):
+
+def create_probe_model_df(datatype, traintest, reverse = False):
     model_hs = pd.read_csv(f'dfs/{datatype}_{traintest}_model_hss.csv', index_col = 0)
-    probetargets = pd.read_csv(f'dfs/{datatype}_{traintest}_probetargets.csv', index_col = 0)
+    if reverse:
+        probetargets = pd.read_csv(f'dfs/{datatype}_{traintest}_reverseprobetargets.csv', index_col = 0)
+    else:
+        probetargets = pd.read_csv(f'dfs/{datatype}_{traintest}_probetargets.csv', index_col = 0)
     keys = [mkey for mkey in model_hs.columns]
     for pkey in probetargets.columns:
         keys.append(f'p-{pkey}')
@@ -277,8 +299,12 @@ def create_probe_model_df(datatype, traintest):
                     df[f'p-{pkey}'].append(prow[pkey])
                 df['p-CL'].append(CL)
     df = pd.DataFrame(df)
-    df.to_csv(f'dfs/{datatype}_{traintest}_probetorun.csv')
+    if reverse:
+        df.to_csv(f'dfs/{datatype}_{traintest}_reverseprobetorun.csv')
+    else:
+        df.to_csv(f'dfs/{datatype}_{traintest}_probetorun.csv')
     return df
+
 
 def get_savepath(modelpath, targetname, layer, inlayerpos, CL, append = ''):
     modelname = modelpath[modelpath.rfind('/')+1:-4]
@@ -298,7 +324,6 @@ def get_savepath(modelpath, targetname, layer, inlayerpos, CL, append = ''):
 def train_probe(input, output, savepath):
     # assumes modelname doesnt have .pth
     input, output = input.detach().numpy(), output.detach().numpy()
-    
     clf = Ridge(alpha=1.0)
     clf.fit(input, output)
     # save clf
@@ -309,7 +334,7 @@ def train_probe(input, output, savepath):
     return r2, mse
 
 
-def train_probes(datatype, traintest, my_task_id =0,num_tasks = 1):
+def train_probes(datatype, traintest, my_task_id =0,num_tasks = 1, reverse = False):
     if my_task_id is None:
         my_task_id = int(sys.argv[1])
     if num_tasks is None:
@@ -317,11 +342,16 @@ def train_probes(datatype, traintest, my_task_id =0,num_tasks = 1):
     
 
     #my_fnames = fnames[my_task_id:len(fnames):num_tasks]
-    df = pd.read_csv(f'dfs/{datatype}_{traintest}_probetorun.csv', index_col = 0)
+    if reverse:
+        df = pd.read_csv(f'dfs/{datatype}_{traintest}_reverseprobetorun.csv', index_col = 0)
+        savedir = f'reverseproberesults_{datatype}_{traintest}'
+    else:
+        df = pd.read_csv(f'dfs/{datatype}_{traintest}_probetorun.csv', index_col = 0)
+        savedir = f'proberesults_{datatype}_{traintest}'
     # get all indices in df
     print(len(df))
 
-    savedir = f'proberesults_{datatype}_{traintest}'
+    
     if savedir not in os.listdir('dfs/proberesults'):
         os.mkdir(f'dfs/proberesults/{savedir}')
     
@@ -331,27 +361,34 @@ def train_probes(datatype, traintest, my_task_id =0,num_tasks = 1):
     minidf['p-r2'] = []
     minidf['p-mse'] = []
     minidf['p-savepath'] = []
-
+    print(max(my_indices))
     for i, index in enumerate(my_indices):
-        print(i)
-        continue
         row = df.iloc[index]
         pCL = row['p-CL']
         layer = row['h-layerpos']
         inlayerpos = row['h-inlayerpos']
-        hss = torch.load(row['h-hspath'])
+        hpath = row['h-hspath']
+        hss = torch.load(hpath)
         hs = hss[layer][inlayerpos][:, pCL]
         target = row['p-targetname']
         targetpath = row['p-targetpath']
         targetval = torch.load(targetpath)[target][:, pCL]
         modelpath = row['m-modelpath']
-        savepath = get_savepath(modelpath, target, layer, inlayerpos, pCL)
-        r2, mse = train_probe(hs,targetval, savepath)
+        if reverse:
+            append = 'reverse'
+            input, output = targetval, hs
+        else:
+            append = ''
+            input, output = hs, targetval
+        savepath = get_savepath(modelpath, target, layer, inlayerpos, pCL, append)
+        r2, mse = train_probe(input,output, savepath)
+        print(f'{index}: layer {layer}, inlayer {inlayerpos}, CL {pCL}|  {target}, R^2 = {r2:.3f}')
         for key in df.columns:
             minidf[key].append(row[key])
         minidf['p-r2'].append(r2)
         minidf['p-mse'].append(mse)
         minidf['p-savepath'].append(savepath)
+    
     
     minidfdf = pd.DataFrame(minidf)
     minidfdf.to_csv(f'dfs/proberesults/{savedir}/proberesults_{datatype}_{traintest}_{my_task_id}.csv')
@@ -390,11 +427,8 @@ def train_cca_probes(datatype, traintest, maxdeg, my_task_id =0,num_tasks = 1):
     minidf['cca-mse'] = []
     minidf['cca-savepath'] = []
     
-
     for i, index in enumerate(my_indices):
         for deg in range(1, maxdeg+1):
-            print(i, deg)
-            continue
             row = df.iloc[index]
             pCL = row['p-CL']
             layer = row['h-layerpos']
@@ -414,6 +448,9 @@ def train_cca_probes(datatype, traintest, maxdeg, my_task_id =0,num_tasks = 1):
             minidf['cca-mse'].append(mse)
             minidf['cca-deg'].append(deg)
             minidf['cca-savepath'].append(savepath)
+            # if (i+1) % 100 == 0:
+            #     minidfdf = pd.DataFrame(minidf)
+            #     minidfdf.to_csv(f'dfs/proberesults/{savedir}/proberesults_{datatype}_{traintest}_{my_task_id}.csv')
 
     
     minidfdf = pd.DataFrame(minidf)
@@ -423,66 +460,32 @@ def train_cca_probes(datatype, traintest, maxdeg, my_task_id =0,num_tasks = 1):
 
 
 if __name__ == '__main__':
-    #generate_rk_targets('underdamped', 'train')
-    #generate_mw_targets('underdamped', 'train')
-    #create_probetarget_df('underdamped', 'train')
-    #create_probe_model_df('underdamped', 'train')
-    # df = pd.read_csv('dfs/underdamped_train_probetorun.csv')
-    # row = df.iloc[123123]
-    # pCL = row['p-CL']
-    # emb = row['m-emb']
-    # layer = row['h-layerpos']
-    # inlayerpos = row['h-inlayerpos']
-    # hss = torch.load(row['h-hspath'])
-    # hs = hss[layer][inlayerpos][:, pCL]
-    # target = row['p-targetname']
-    # targetpath = row['p-targetpath']
-    # targetval = torch.load(targetpath)[target][:, pCL]
-    # #find index of last backslash in modelname
-    # modelpath = row['m-modelpath']
 
-    # train_probe(hs,targetval, modelpath, target, pCL)
     df = get_model_df()
     df = df[df['epoch'] == 20000]
     lrdf = df[df['datatype'] == 'linreg1']
     my_task_id, num_tasks = 0,1
 
-    datatype, traintest = 'linreg1', 'train'
-    print(len(lrdf))
-    #lrhsdf = get_model_hs_df(lrdf, datatype = datatype, traintest = traintest)
-    #print(len(lrhsdf))
-    generate_lr_targets(datatype, traintest)
-    create_probetarget_df(datatype, traintest)
-    lrpdf = create_probe_model_df(datatype, traintest)
-    train_probes(datatype, traintest, my_task_id = my_task_id, num_tasks = num_tasks)
+    datatype, traintest = 'wlinreg1cca', 'train'
+    # generate_reverselr_targets(datatype, traintest)
+    # get_model_hs_df(lrdf, datatype, traintest)
+    #mpdf = create_probe_model_df(datatype, traintest, reverse = True)
+    #train_probes(datatype, traintest, my_task_id, num_tasks, reverse = True)
+    #create_probetarget_df(datatype, traintest, reverse = True)
+    # mpdf = mpdf[mpdf['p-targetname'] == 'lr_wpow']
+    # # reset index
+    # mpdf = mpdf.reset_index(drop = True)
+    # print(mpdf)
+    # #print(mpdf)
+    #datatype = 'wlinreg1cca'
+    # mpdf.to_csv(f'dfs/{datatype}_{traintest}_probetorun.csv')
+    # print(len(mpdf))
 
-    datatype, traintest = 'linreg1cca', 'train'
-    print(len(lrdf))
-    #lrhsdf = get_model_hs_df(lrdf, datatype = datatype, traintest = traintest)
-    #print(len(lrhsdf))
-    generate_lr_cca_targets(datatype, traintest)
-    create_probetarget_df(datatype, traintest)
-    lrpdf = create_probe_model_df(datatype, traintest)
-    train_cca_probes(datatype, traintest, maxdeg = 5, my_task_id = my_task_id, num_tasks = num_tasks)
+    #print(mpdf['m-layer'].unique(), mpdf['m-emb'].unique())
+
+    train_cca_probes(datatype, traintest, 5, my_task_id, num_tasks)
 
 
-    # generate_rk_targets(datatype, traintest, maxdeg = 5)
-    # generate_mw_targets(datatype, traintest)
-    # generate_lm_targets(datatype, traintest, maxdeg = 5)
-    
-    # generate_lr_cca_targets(datatype, traintest)
-    # create_probetarget_df(datatype, traintest)
-    # df = create_probe_model_df(datatype, traintest)
-    # print(len(df))
-    # print(df.columns)
-    # print(df['p-targetname'].unique())
-    # print(df['p-deg'].unique())
-    # train_cca_probes(datatype, traintest, 5)
-    # print(len(df), 'DATAFRAME LENGTH')
-    # train_probes(datatype, traintest)
-    # generate_exp_targets(datatype, traintest)
-    # create_probetarget_df(datatype, traintest)
-    # create_probe_model_df(datatype, traintest)
 
-    #train_probes(datatype, traintest, my_task_id = None,num_tasks = None)
+
 
