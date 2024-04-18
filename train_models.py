@@ -79,7 +79,6 @@ def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring'
         
         for batch_X, batch_y in train_loader:
             batch_X, batch_y = batch_X.to(device), batch_y.to(device)
-            print(batch_X.shape)
             optimizer.zero_grad()
             output = model(batch_X)
             if 'linreg' in fname:
@@ -157,7 +156,6 @@ def train_many(LWs, title, traindata, testdata, CL, my_task_id, num_tasks):
         config.n_layer = L
         config.n_embd = W
         config.max_seq_length = CL + 1
-        return
         train(config, traindata, testdata, fname = title, CL = CL)
 
 if __name__ == '__main__':
@@ -193,6 +191,7 @@ if __name__ == '__main__':
     my_task_id = 0
     num_tasks = 18
     title = 'linreg1'
+
     
     train_many(LWs, title, traindata, testdata, CL, my_task_id, num_tasks)
     # traindata2 = datadict['sequences_train_overdamped']
