@@ -152,7 +152,7 @@ def train_many(LWs, title, traindata, testdata, CL, my_task_id, num_tasks):
     my_fnames = fnames[my_task_id:len(fnames):num_tasks]
     print(my_fnames)
     for L,W in my_fnames:
-        config = linreg_config()#get_default_config()
+        config = get_default_config() #linreg_config()
         config.n_layer = L
         config.n_embd = W
         config.max_seq_length = CL + 1
@@ -172,25 +172,25 @@ if __name__ == '__main__':
     # traindata1 = traindata1[torch.randperm(traindata1.size()[0])]
     # testdata1 = datadict[f'sequences_test_{datatype}']
     # testdata1 = testdata1[torch.randperm(testdata1.size()[0])]
-    datadict = torch.load('data/linreg1_data.pth')
-    traindata = datadict['traindata']
-    testdata = datadict['testdata']
-    CL = 2*65
-    Ls = [4,5]
+    datadict = torch.load('data/undampedspring_data.pth')
+    traindata = datadict['sequences_train']
+    testdata = datadict['sequences_test']
+    CL = 65
+    Ls = [1,2,3,4,5]
     Ws = [2,4,8,16,32,64]
     LWs = []
     for L in Ls:
         for W in Ws:
             LWs.append((L,W))
-    Ls = [1,2,3]
-    Ws = [32,64]
-    for L in Ls:
-        for W in Ws:
-            LWs.append((L,W))
-    print(len(LWs))
-    my_task_id = 0
-    num_tasks = 18
-    title = 'linreg1'
+    # Ls = [1,2,3]
+    # Ws = [32,64]
+    # for L in Ls:
+    #     for W in Ws:
+    #         LWs.append((L,W))
+    # print(len(LWs))
+    my_task_id = None
+    num_tasks = None
+    title = 'undamped'
 
     
     train_many(LWs, title, traindata, testdata, CL, my_task_id, num_tasks)

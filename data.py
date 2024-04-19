@@ -6,6 +6,25 @@ set_seed(10)
 
 def generate_springdata(num_samples = 1000, sequence_length=10, plot = False):
     # Generate x = cos(wt), v = -w*sin(wt). trains on omegas between 0.5pi and 1pi, tests on 0.25pi-0.5pi and 1pi-1.25pi
+    def get_random_start(target_size):
+        # can be used to get x0, v0
+        random_numbers = 2 * torch.rand(target_size[0]) - 1
+        # Expand each number to a row of 65 identical elements
+        expanded_tensor = random_numbers.unsqueeze(1).expand(-1, target_size[1])
+        return expanded_tensor
+    
+    def plot_random(sequences):
+        # Plot a random sequence
+        random_index = torch.randint(0, sequences.shape[0], (1,)).item()
+        x = sequences[random_index, :, 0]
+        v = sequences[random_index, :, 1]
+        plt.plot(x,v, marker = 'o')
+        plt.xlabel('x')
+        plt.ylabel('v')
+        plt.title(f'Sequence {random_index} Plotted in x-v Phase Space')
+        plt.legend()
+        plt.show()
+    
     omegas_range = [0.25*torch.pi, 1.25*torch.pi]
     delta_omega  = omegas_range[1]-omegas_range[0]
     
@@ -13,13 +32,15 @@ def generate_springdata(num_samples = 1000, sequence_length=10, plot = False):
     # middle half of the omega interval is the training set
     train_deltat = torch.rand(num_samples) * 2*torch.pi / (train_omegas) # cos(wt) has period 2pi/w. so deltat>2pi/w is redundant
 
-    start = 1
+    start = 0
     skip = 1
     train_times = torch.arange(start, start+skip*sequence_length+1, step = skip).unsqueeze(0).repeat(num_samples, 1)
     train_times = train_times * train_deltat.unsqueeze(1)
-
-    x_train = torch.cos(train_omegas.unsqueeze(1) * train_times)
-    v_train = -train_omegas.unsqueeze(1) * torch.sin(train_omegas.unsqueeze(1) * train_times)
+    train_omegas_unsq = train_omegas.unsqueeze(1)
+    
+    x0_train, v0_train = get_random_start(train_times.shape), get_random_start(train_times.shape)
+    x_train = x0_train * torch.cos(train_omegas_unsq * train_times) + (v0_train / train_omegas_unsq) * torch.sin(train_omegas_unsq * train_times)
+    v_train = -x0_train * train_omegas_unsq * torch.sin(train_omegas_unsq * train_times) + v0_train * torch.cos(train_omegas_unsq * train_times)
     # stack x and v
     sequences_train = torch.stack((x_train, v_train), dim=2)  # Shape: (num_samples, sequence_length, 2)
     
@@ -32,9 +53,11 @@ def generate_springdata(num_samples = 1000, sequence_length=10, plot = False):
 
     test_times = torch.arange(start, start+skip*sequence_length+1, step = skip).unsqueeze(0).repeat(test_deltat.shape[-1], 1)
     test_times = test_times * test_deltat.unsqueeze(1)
+    test_omegas_unsq = test_omegas.unsqueeze(1)
 
-    x_test = torch.cos(test_omegas.unsqueeze(1) * test_times)
-    v_test = -test_omegas.unsqueeze(1) * torch.sin(test_omegas.unsqueeze(1) * test_times)
+    x0_test, v0_test = get_random_start(test_times.shape), get_random_start(test_times.shape)
+    x_test = x0_test * torch.cos(test_omegas_unsq * test_times) + (v0_test / test_omegas_unsq) * torch.sin(test_omegas_unsq * test_times) 
+    v_test = -x0_test * test_omegas_unsq * torch.sin(test_omegas_unsq * test_times) + v0_test * torch.cos(test_omegas_unsq * test_times)
     # stack x and v
     sequences_test = torch.stack((x_test, v_test), dim=2)  # Shape: (num_samples, sequence_length, 2)
 
@@ -46,8 +69,10 @@ def generate_springdata(num_samples = 1000, sequence_length=10, plot = False):
         'test_omegas': test_omegas,
         'train_times': train_times,
         'test_times': test_times
-    }, f'data/spring_data.pth')
+    }, f'data/undampedspring_data.pth')
     if plot:
+        plot_random(sequences_train)
+        plot_random(sequences_test)
         plt.hist(train_omegas, color = 'b', label = 'Training Omegas', bins=20)
         plt.hist(test_omegas, color = 'r', label = 'Test Omegas', bins=20)
         plt.xlabel('Omega')
@@ -297,4 +322,5 @@ if __name__ == '__main__':
     #generate_dampedspringdata(num_samples = 10000, sequence_length=65, plot = False)
     #plot_training_data()
     #playground()
-    generate_linregdata(5000, 65)
+    #generate_linregdata(5000, 65)
+    generate_springdata(5000, 65, plot = True)
