@@ -66,7 +66,7 @@ def plot_ICL(modeldf, datatype = 'underdamped', traintest = 'train'):
         #print(mses.shape)
         #mses = [mses[:,:i].mean() for i in CLs]
         slope, intercept, r_value = get_log_log_linear(CLs, mses)
-        plt.plot(CLs, mses, label = f'{row["emb"]}emb_{row["layer"]}layer: log(MSE) = {slope:.4f}log(CL) + {intercept:.2f}, R^2 = {r_value**2:.2f}')
+        plt.plot(CLs, mses, label = f'{row["emb"]}emb_{row["layer"]}layer Last MSE: {mses[-1]:.2e}')#log(MSE) = {slope:.4f}log(CL) + {intercept:.2f}, R^2 = {r_value**2:.2f}')
         data[(row['emb'], row['layer'])] = mses
     plt.xlabel("CL")
     plt.ylabel("MSE")
@@ -115,6 +115,8 @@ if __name__ == '__main__':
     df = get_model_df()
     df = df[df['epoch'] == 20000]
     df = df[df['datatype'] == 'linreg1']
+    # emb not 16
+    df = df[df['emb'] != 64]
     print(df)
     # df = df[df['emb'] == 16]
     # df = df[df['layer'] == 2]

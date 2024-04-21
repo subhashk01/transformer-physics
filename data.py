@@ -19,6 +19,7 @@ def generate_springdata(num_samples = 1000, sequence_length=10, plot = False):
         x = sequences[random_index, :, 0]
         v = sequences[random_index, :, 1]
         plt.plot(x,v, marker = 'o')
+        plt.scatter(x[0], v[0], color = 'r', s = 100, label = 'Start')
         plt.xlabel('x')
         plt.ylabel('v')
         plt.title(f'Sequence {random_index} Plotted in x-v Phase Space')

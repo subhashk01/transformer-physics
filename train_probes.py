@@ -241,7 +241,8 @@ def create_probetarget_df(datatype, traintest, save = True, reverse = False):
     allmethods = {'underdamped': ['mw', 'rk', 'lm', 'eA'],
                   'linreg1': ['lr'],
                   'linreg1cca': ['lr_cca'],
-                  'rlinreg1': ['rlr']}
+                  'rlinreg1': ['rlr'],
+                  'wlinreg1cca': ['lr_cca']}
     probetargets = {'targetmethod':[], 'targetname':[], 'targetpath':[], 'deg': [],'datatype':[], 'traintest':[]}
     nodegmethods = ['mw', 'eA', 'lr', 'rlr']
     for method in allmethods[datatype]:
@@ -464,26 +465,31 @@ if __name__ == '__main__':
     df = get_model_df()
     df = df[df['epoch'] == 20000]
     lrdf = df[df['datatype'] == 'linreg1']
+    lrdf = lrdf[lrdf['emb'] != 64]
     my_task_id, num_tasks = 0,1
 
+
     datatype, traintest = 'wlinreg1cca', 'train'
-    # generate_reverselr_targets(datatype, traintest)
-    # get_model_hs_df(lrdf, datatype, traintest)
-    #mpdf = create_probe_model_df(datatype, traintest, reverse = True)
+    generate_lr_cca_targets(datatype, traintest)
+    get_model_hs_df(lrdf, datatype, traintest)
+    create_probetarget_df(datatype, traintest)
+    mpdf = create_probe_model_df(datatype, traintest)
+    
+    mpdf = mpdf[mpdf['p-targetname'] == 'lr_wpow']
+    # reset index
+    mpdf = mpdf.reset_index(drop = True)
+    datatype = 'wlinreg1cca'
+    mpdf.to_csv(f'dfs/{datatype}_{traintest}_probetorun.csv')
+    print(mpdf['m-layer'].unique(), mpdf['m-emb'].unique())
+    #train_cca_probes(datatype, traintest, 5, my_task_id, num_tasks)
+
+    datatype, traintest = 'rlinreg1', 'train'
+    get_model_hs_df(lrdf, datatype, traintest)
+    generate_reverselr_targets(datatype, traintest)
+    create_probetarget_df(datatype, traintest, save = True, reverse = True)
+    create_probe_model_df(datatype, traintest, reverse = True)
+
     #train_probes(datatype, traintest, my_task_id, num_tasks, reverse = True)
-    #create_probetarget_df(datatype, traintest, reverse = True)
-    # mpdf = mpdf[mpdf['p-targetname'] == 'lr_wpow']
-    # # reset index
-    # mpdf = mpdf.reset_index(drop = True)
-    # print(mpdf)
-    # #print(mpdf)
-    #datatype = 'wlinreg1cca'
-    # mpdf.to_csv(f'dfs/{datatype}_{traintest}_probetorun.csv')
-    # print(len(mpdf))
-
-    #print(mpdf['m-layer'].unique(), mpdf['m-emb'].unique())
-
-    train_cca_probes(datatype, traintest, 5, my_task_id, num_tasks)
 
 
 
