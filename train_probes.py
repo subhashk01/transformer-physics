@@ -9,7 +9,8 @@ import sys
 from sklearn.cross_decomposition import CCA
 from sklearn.metrics import mean_squared_error
 import numpy as np
-from analyze_models import get_model_hs_df, get_model_df
+from analyze_models import get_model_hs_df, get_df_models
+from tqdm import tqdm
 
 def get_expanded_data(datatype, traintest):
     gammas, omegas, sequences, times, deltat = get_data(datatype, traintest)
@@ -427,8 +428,13 @@ def train_cca_probes(datatype, traintest, maxdeg, my_task_id =0,num_tasks = 1):
     minidf['cca-deg'] = []
     minidf['cca-mse'] = []
     minidf['cca-savepath'] = []
-    
-    for i, index in enumerate(my_indices):
+
+    epoch_pbar = tqdm(range(len(my_indices)), desc='Training Progress')
+
+    saveprobes = f'dfs/proberesults/{savedir}/proberesults_{datatype}_{traintest}_102.csv' # TODO: CHANGE THIS BACK
+
+    for i in epoch_pbar:
+        index = my_indices[i]
         for deg in range(1, maxdeg+1):
             row = df.iloc[index]
             pCL = row['p-CL']
@@ -441,53 +447,67 @@ def train_cca_probes(datatype, traintest, maxdeg, my_task_id =0,num_tasks = 1):
             targetval = torch.load(targetpath)[target][:, pCL, :deg]
             modelpath = row['m-modelpath']
             savepath = get_savepath(modelpath, target, layer, inlayerpos, pCL, append = f'deg{deg}')
-            r2, mse = train_cca_probe(hs,targetval, savepath)
-            print(f'{index}: layer {layer}, inlayer {inlayerpos}, CL {pCL}|  {target}, deg{deg}, R^2 = {r2:.3f}')
+            varhs = torch.var(hs, dim=0, unbiased=False)
+            if max(varhs) < 1e-4:
+                r2, mse = 0, float('inf')
+            else:
+                r2, mse = train_cca_probe(hs,targetval, savepath)
+            #print(f'{index}: layer {layer}, inlayer {inlayerpos}, CL {pCL}|  {target}, deg{deg}, R^2 = {r2:.3f}')
             for key in df.columns:
                 minidf[key].append(row[key])
             minidf['cca-r2'].append(r2)
             minidf['cca-mse'].append(mse)
             minidf['cca-deg'].append(deg)
             minidf['cca-savepath'].append(savepath)
-            # if (i+1) % 100 == 0:
-            #     minidfdf = pd.DataFrame(minidf)
-            #     minidfdf.to_csv(f'dfs/proberesults/{savedir}/proberesults_{datatype}_{traintest}_{my_task_id}.csv')
+
+            epoch_pbar.set_description(f'Epoch {i + 1}/{len(my_indices)}')
+            epoch_pbar.set_postfix({'layer': f'{layer}',
+                        'inlayer': f'{inlayerpos}',
+                        'CL': f'{pCL}',
+                        'target': f'{target}',
+                        'deg': f'{deg}',
+                        'R^2': f'{r2:.3f}'
+                        })
+            if (i+1) % 100 == 0:
+                minidfdf = pd.DataFrame(minidf)
+                minidfdf.to_csv(saveprobes)
 
     
     minidfdf = pd.DataFrame(minidf)
-    minidfdf.to_csv(f'dfs/proberesults/{savedir}/proberesults_{datatype}_{traintest}_{my_task_id}.csv')
+    minidfdf.to_csv(saveprobes)
     
 
 
 
 if __name__ == '__main__':
 
-    df = get_model_df()
+    df = get_df_models()
     df = df[df['epoch'] == 20000]
     lrdf = df[df['datatype'] == 'linreg1']
-    lrdf = lrdf[lrdf['emb'] != 64]
+    print(lrdf)
+    #lrdf = lrdf[lrdf['layer'] > 3]
     my_task_id, num_tasks = 0,1
 
 
     datatype, traintest = 'wlinreg1cca', 'train'
-    generate_lr_cca_targets(datatype, traintest)
-    get_model_hs_df(lrdf, datatype, traintest)
-    create_probetarget_df(datatype, traintest)
-    mpdf = create_probe_model_df(datatype, traintest)
+    # generate_lr_cca_targets(datatype, traintest)
+    # get_model_hs_df(lrdf, datatype, traintest)
+    # create_probetarget_df(datatype, traintest)
+    # mpdf = create_probe_model_df(datatype, traintest)
     
-    mpdf = mpdf[mpdf['p-targetname'] == 'lr_wpow']
-    # reset index
-    mpdf = mpdf.reset_index(drop = True)
-    datatype = 'wlinreg1cca'
-    mpdf.to_csv(f'dfs/{datatype}_{traintest}_probetorun.csv')
-    print(mpdf['m-layer'].unique(), mpdf['m-emb'].unique())
-    #train_cca_probes(datatype, traintest, 5, my_task_id, num_tasks)
+    # mpdf = mpdf[mpdf['p-targetname'] == 'lr_wpow']
+    # # reset index
+    # mpdf = mpdf.reset_index(drop = True)
+    # datatype = 'wlinreg1cca'
+    # mpdf.to_csv(f'dfs/{datatype}_{traintest}_probetorun.csv')
+    # print(mpdf['m-layer'].unique(), mpdf['m-emb'].unique())
+    train_cca_probes(datatype, traintest, 5, my_task_id, num_tasks)
 
-    datatype, traintest = 'rlinreg1', 'train'
-    get_model_hs_df(lrdf, datatype, traintest)
-    generate_reverselr_targets(datatype, traintest)
-    create_probetarget_df(datatype, traintest, save = True, reverse = True)
-    create_probe_model_df(datatype, traintest, reverse = True)
+    # datatype, traintest = 'rlinreg1', 'train'
+    # get_model_hs_df(lrdf, datatype, traintest)
+    # generate_reverselr_targets(datatype, traintest)
+    # create_probetarget_df(datatype, traintest, save = True, reverse = True)
+    # create_probe_model_df(datatype, traintest, reverse = True)
 
     #train_probes(datatype, traintest, my_task_id, num_tasks, reverse = True)
 

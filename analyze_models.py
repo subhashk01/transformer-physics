@@ -6,7 +6,7 @@ import os
 import re
 from util import load_model, get_data, get_log_log_linear
 
-def get_model_df():
+def get_df_models():
     # NEED LOSS PATHS SOMEHOW
 
     models = {
@@ -96,6 +96,7 @@ def get_model_hs_df(modeldf, datatype = 'underdamped', traintest = 'train'):
             _, _, sequences, _, _ = get_data(datatype, traintest)
         X, _ = sequences[:, :-1], sequences[:, 1:]
         _, hs = model.forward_hs(X)
+        breakpoint()
         savepath = row['modelpath'][:-4]+'_hss.pth'
         for layer in hs:
             for inlayerpos in hs[layer]:
@@ -112,15 +113,17 @@ def get_model_hs_df(modeldf, datatype = 'underdamped', traintest = 'train'):
     return hsdf
         
 if __name__ == '__main__':
-    df = get_model_df()
+    df = get_df_models()
     df = df[df['epoch'] == 20000]
     df = df[df['datatype'] == 'linreg1']
     # emb not 16
     df = df[df['emb'] != 64]
+    df = df[(df['emb'] == 32) & (df['layer'] == 5)]
     print(df)
+    get_model_hs_df(df, datatype = 'linreg1', traintest = 'train')
     # df = df[df['emb'] == 16]
     # df = df[df['layer'] == 2]
-    plot_ICL(df, datatype = 'linreg1', traintest = 'test')
+    #plot_ICL(df, datatype = 'linreg1', traintest = 'test')
     #get_model_hs_df(df, datatype = 'linreg1cca', traintest = 'train')
     #get_model_hs_df(df)
     #plot_ICL(df, datatype = 'overdamped', traintest = 'test')
