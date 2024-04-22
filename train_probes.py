@@ -431,7 +431,7 @@ def train_cca_probes(datatype, traintest, maxdeg, my_task_id =0,num_tasks = 1):
 
     epoch_pbar = tqdm(range(len(my_indices)), desc='Training Progress')
 
-    saveprobes = f'dfs/proberesults/{savedir}/proberesults_{datatype}_{traintest}_102.csv' # TODO: CHANGE THIS BACK
+    saveprobes = f'dfs/proberesults/{savedir}/proberesults_{datatype}_{traintest}_{my_task_id}.csv'
 
     for i in epoch_pbar:
         index = my_indices[i]
