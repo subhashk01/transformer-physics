@@ -100,7 +100,7 @@ def generate_mw_targets(datatype, traintest, maxdeg = 5):
     save_probetargets(targets, f'mw_targets.pth', datatype, traintest)
 
 
-def generate_exp_targets(datatype, traintest):
+def generate_exp_targets(datatype, traintest, reverse = False):
     criterion = torch.nn.MSELoss()
     omegas, gammas, deltat, X, y, x, v = get_expanded_data(datatype, traintest)
     A = torch.zeros((X.shape[0],2,2)) # each time series has its own A. but A is constant with CL
@@ -119,13 +119,16 @@ def generate_exp_targets(datatype, traintest):
         mse = criterion(ypred, y)
         return mse
     targets = {}
-    targets['eAdt00'] = eAdt[:, :, 0, 0]
-    targets['eAdt01'] = eAdt[:, :, 0, 1]
-    targets['eAdt10'] = eAdt[:, :, 1, 0]
-    targets['eAdt11'] = eAdt[:, :, 1, 1]
-    targets['eAdt'] = eAdt.view(eAdt.shape[0], eAdt.shape[1], eAdt.shape[2]*eAdt.shape[3])
+    prec = ''
+    if reverse:
+        prec = 'r'
+    targets[f'{prec}eAdt00'] = eAdt[:, :, 0, 0]
+    targets[f'{prec}eAdt01'] = eAdt[:, :, 0, 1]
+    targets[f'{prec}eAdt10'] = eAdt[:, :, 1, 0]
+    targets[f'{prec}eAdt11'] = eAdt[:, :, 1, 1]
+    targets[f'{prec}eAdt'] = eAdt.view(eAdt.shape[0], eAdt.shape[1], eAdt.shape[2]*eAdt.shape[3])
     mse = test_exp()
-    save_probetargets(targets, f'eA_targets.pth', datatype, traintest)
+    save_probetargets(targets, f'{prec}eA_targets.pth', datatype, traintest)
 
 
 
@@ -231,15 +234,18 @@ def save_probetargets(targets, fname, datatype, traintest):
         os.mkdir(f'{bigdir}/{dir}')
     torch.save(targets, f'{bigdir}/{dir}/{fname}')
 
-def create_probetarget_df(datatype, traintest, save = True, reverse = False):
+def create_probetarget_df(datatype, traintest, reverse = False):
+    prec = ''
+    if reverse == True:
+        prec = 'r'
     allmethods = {'underdamped': ['mw', 'rk', 'lm', 'eA'],
                   'linreg1': ['lr'],
                   'linreg1cca': ['lr_cca'],
                   'rlinreg1': ['rlr'],
                   'wlinreg1cca': ['lr_cca'],
-                  'undamped': ['eA']}
+                  'undamped': [f'{prec}eA']}
     probetargets = {'targetmethod':[], 'targetname':[], 'targetpath':[], 'deg': [],'datatype':[], 'traintest':[]}
-    nodegmethods = ['mw', 'eA', 'lr', 'rlr', 'lm']
+    nodegmethods = ['mw', 'eA', 'lr', 'rlr', 'lm', 'reA']
     for method in allmethods[datatype]:
         dir = f'probe_targets/{datatype}_{traintest}'
         fname = f'{method}_targets'
@@ -320,6 +326,8 @@ def get_savepath(modelpath, targetname, layer, inlayerpos, CL, append = ''):
 def train_probe(input, output, savepath):
     # assumes modelname doesnt have .pth
     input, output = input.detach().numpy(), output.detach().numpy()
+    if len(input.shape) == 1:
+        input = input.reshape(-1, 1)
     clf = Ridge(alpha=1.0)
     clf.fit(input, output)
     # save clf
@@ -482,7 +490,11 @@ if __name__ == '__main__':
     my_task_id, num_tasks = None,None
 
     datatype, traintest = 'undamped', 'train'
-    # generate_exp_targets(datatype, traintest)
+    # generate_exp_targets(datatype, traintest, reverse=True)
+    # pdf = create_probetarget_df(datatype, traintest, reverse = True)
+    # mpdf = create_probe_model_df(datatype, traintest, reverse = True)
+    train_probes(datatype, traintest, my_task_id, num_tasks, reverse = True)
+    #create_probetarget_df(datatype, traintest)
     # pdf = create_probetarget_df(datatype, traintest)
     # pmdf = create_probe_model_df(datatype, traintest)
     # generate_lr_cca_targets(datatype, traintest)
@@ -504,7 +516,7 @@ if __name__ == '__main__':
     # create_probetarget_df(datatype, traintest, save = True, reverse = True)
     # create_probe_model_df(datatype, traintest, reverse = True)
 
-    train_probes(datatype, traintest, my_task_id, num_tasks, reverse = False)
+    #train_probes(datatype, traintest, my_task_id, num_tasks, reverse = False)
 
 
 
