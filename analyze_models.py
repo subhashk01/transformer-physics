@@ -46,28 +46,38 @@ def get_df_models():
 
 def plot_ICL(modeldf, datatype = 'underdamped', traintest = 'train'):
     plt.figure(figsize = (10,10))
-    data = {}
+    savedata = {'emb':[], 'layer':[], 'CL':[], 'mse':[]}
+    savepath = f'dfs/{datatype}_{traintest}_ICL.csv'
     for index, row in modeldf.iterrows():
         model = load_model(row, datatype)
         if 'linreg' in datatype:
             _, sequences = get_data(datatype, traintest)
             X, y = sequences[:, :-1], sequences[:, 1:]
-            print(X.shape, 'X here')
             ypred = model(X)
             y, ypred = y[:, 0::2], ypred[:, 0::2]
         else:
             _, _, sequences, _, _ = get_data(datatype, traintest)
             X, y = sequences[:, :-1], sequences[:, 1:]
-            print(X.shape, 'X here')
             ypred = model(X)
         CLs = range(1, y.shape[1]+1)
         mses = ((ypred - y)**2).mean(dim=2).detach()
         mses = mses.mean(dim=0).numpy()
+        for i in range(len(CLs)):
+            savedata['emb'].append(row['emb'])
+            savedata['layer'].append(row['layer'])
+            CL = i
+            if 'linreg' in datatype:
+                CL = i*2
+            savedata['CL'].append(CL)
+            savedata['mse'].append(mses[i])
         #print(mses.shape)
         #mses = [mses[:,:i].mean() for i in CLs]
         slope, intercept, r_value = get_log_log_linear(CLs, mses)
-        plt.plot(CLs, mses, label = f'{row["emb"]}emb_{row["layer"]}layer Last MSE: {mses[-1]:.2e}')#log(MSE) = {slope:.4f}log(CL) + {intercept:.2f}, R^2 = {r_value**2:.2f}')
-        data[(row['emb'], row['layer'])] = mses
+        label = f'{row["emb"]}emb_{row["layer"]}layer Last MSE: {mses[-1]:.2e}'
+        print(label)
+        plt.plot(CLs, mses, label = label)#log(MSE) = {slope:.4f}log(CL) + {intercept:.2f}, R^2 = {r_value**2:.2f}')
+        df = pd.DataFrame(savedata)
+        df.to_csv(savepath)
     plt.xlabel("CL")
     plt.ylabel("MSE")
     plt.yscale('log')
@@ -75,7 +85,7 @@ def plot_ICL(modeldf, datatype = 'underdamped', traintest = 'train'):
     plt.title(f'MSE vs Context Length for {datatype} {traintest} data')
     plt.legend()
     plt.show()
-    return data, CLs
+
 
 def get_model_hs_df(modeldf, datatype = 'underdamped', traintest = 'train'):
     #gets hidden states for all models in modeldf, saves them, and returns a dataframe
@@ -96,7 +106,6 @@ def get_model_hs_df(modeldf, datatype = 'underdamped', traintest = 'train'):
             _, _, sequences, _, _ = get_data(datatype, traintest)
         X, _ = sequences[:, :-1], sequences[:, 1:]
         _, hs = model.forward_hs(X)
-        breakpoint()
         savepath = row['modelpath'][:-4]+'_hss.pth'
         for layer in hs:
             for inlayerpos in hs[layer]:
@@ -115,12 +124,10 @@ def get_model_hs_df(modeldf, datatype = 'underdamped', traintest = 'train'):
 if __name__ == '__main__':
     df = get_df_models()
     df = df[df['epoch'] == 20000]
-    df = df[df['datatype'] == 'linreg1']
-    # emb not 16
-    df = df[df['emb'] != 64]
-    df = df[(df['emb'] == 32) & (df['layer'] == 5)]
-    print(df)
-    get_model_hs_df(df, datatype = 'linreg1', traintest = 'train')
+    df = df[df['datatype'] == 'undamped']
+    df = df[df['emb'] < 64]
+    get_model_hs_df(df,'undamped', 'train')
+    #plot_ICL(df, datatype = 'undamped', traintest = 'train')
     # df = df[df['emb'] == 16]
     # df = df[df['layer'] == 2]
     #plot_ICL(df, datatype = 'linreg1', traintest = 'test')

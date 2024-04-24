@@ -105,7 +105,6 @@ class Block(nn.Module):
         def replace(x, key):
             if key in insert:
                 for CL in insert[key].keys():
-                    print(key)
                     x[:, CL] = torch.tensor(insert[key][CL])
             return x
         hs = {}

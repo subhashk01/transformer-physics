@@ -21,7 +21,7 @@ def load_model(df_row, datatype):
         config.max_seq_length = df_row['CL']+1
     else:
         config = get_default_config()
-        config.max_seq_length = df_row['CL']
+        config.max_seq_length = df_row['CL']+1
     config.n_embd = df_row['emb']
     config.n_layer = df_row['layer']
     
@@ -44,13 +44,22 @@ def get_data(datatype = 'underdamped', traintest = 'train'):
         data = datadict[f'{traintest}data'].unsqueeze(-1)
         weights = datadict[f'w_{traintest}']
         return weights, data
-    data = torch.load('data/dampedspring_data.pth')
-    gammas = data[f'gammas_{traintest}_{datatype}']
-    omegas = data[f'omegas_{traintest}_{datatype}']
-    sequences = data[f'sequences_{traintest}_{datatype}']
-    times = data[f'times_{traintest}_{datatype}']
-    deltat = times[:, 1] - times[:, 0]
-    return gammas, omegas, sequences, times, deltat
+    elif 'undamped' in datatype:
+        data = torch.load('data/undampedspring_data.pth')
+        sequences = data[f'sequences_{traintest}']
+        omegas = data[f'{traintest}_omegas']
+        times = data[f'{traintest}_times']
+        deltat = times[:, 1] - times[:, 0]
+        gammas = torch.zeros(omegas.shape)
+        return gammas, omegas, sequences, times, deltat
+    elif 'damped' in datatype:
+        data = torch.load('data/dampedspring_data.pth')
+        gammas = data[f'gammas_{traintest}_{datatype}']
+        omegas = data[f'omegas_{traintest}_{datatype}']
+        sequences = data[f'sequences_{traintest}_{datatype}']
+        times = data[f'times_{traintest}_{datatype}']
+        deltat = times[:, 1] - times[:, 0]
+        return gammas, omegas, sequences, times, deltat
 
 def get_log_log_linear(x,y, return_mse = False):
     # gets the lienar relationship between logx and logy

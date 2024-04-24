@@ -22,7 +22,7 @@ def get_expanded_data(datatype, traintest):
     deltat = deltat.repeat(X.shape[1], 1).T
     return omegas, gammas, deltat, X, y, x, v 
 
-def generate_rk_targets(datatype, traintest, maxdeg = 5):
+def generate_rk_targets(datatype, traintest, maxdeg = 6):
     criterion = torch.nn.MSELoss()
     omegas, gammas, deltat, X, y, x, v = get_expanded_data(datatype, traintest)
     
@@ -33,18 +33,25 @@ def generate_rk_targets(datatype, traintest, maxdeg = 5):
     targets = {}
     # 5000 x 65 x 2 x 2 identity matrix
     totalmat = torch.eye(2).repeat(X.shape[0], X.shape[1], 1, 1)
+
+    # if 'undamped' in datatype:
+    #     two_pi_over_w = 2 * torch.pi / omegas
+    #     print(two_pi_over_w)
+    #     print(deltat)
+    #     k_max = (deltat / two_pi_over_w).floor() - 1 
+    #     deltat = two_pi_over_w * k_max
+
     for i in range(1,maxdeg+1):
         Ai = torch.matrix_power(A, i)
-        targets[f'rk_A10_j{i}'] = Ai[:,:,1,0]
-        targets[f'rk_A11_j{i}'] = Ai[:,:,1,1]
-        targets[f'rk_dt_j{i}'] = deltat**i
-        targets[f'rk_A10dt_j{i}'] = Ai[:,:,1,0] * deltat**i
-        targets[f'rk_A11dt_j{i}'] = Ai[:,:,1,1] * deltat**i
-        targets[f'rk_A10dtx_j{i}'] = Ai[:,:,1,0] * deltat**i * x
-        targets[f'rk_A11dtv_j{i}'] = Ai[:,:,1,1] * deltat**i * v
+        targets[f'rk_A00dt{i}'] = Ai[:,:,0,0] * deltat**i
+        targets[f'rk_A01dt{i}'] = Ai[:,:,0,1] * deltat**i
+        targets[f'rk_A10dt{i}'] = Ai[:,:,1,0] * deltat**i
+        targets[f'rk_A11dt{i}'] = Ai[:,:,1,1] * deltat**i
 
         # make prediction for each degree
         coef = 1/factorial(i)
+        
+
         currentmat = coef * Ai * (deltat**i).unsqueeze(-1).unsqueeze(-1).repeat(1, 1, 2, 2)
         totalmat += currentmat 
         totalmat = totalmat.squeeze(-1)
@@ -110,27 +117,14 @@ def generate_exp_targets(datatype, traintest):
         ypred = eAdt@X.unsqueeze(-1)
         ypred = ypred.squeeze(-1)
         mse = criterion(ypred, y)
-    def compare_exp_mw():
-        mw = torch.load(f'probe_targets/{datatype}_{traintest}/mw_targets.pth')
-        mw_weights = torch.zeros(eAdt.shape)
-        mw_weights[:,:, 0, 0] = mw['mw_egtw00']
-        mw_weights[:, :, 0, 1] = mw['mw_egtw01']
-        mw_weights[:, :, 1, 0] = mw['mw_egtw10']
-        mw_weights[:, :, 1, 1] = mw['mw_egtw11']
-        print(mw_weights[1000,0])
+        return mse
     targets = {}
-    
-
     targets['eAdt00'] = eAdt[:, :, 0, 0]
     targets['eAdt01'] = eAdt[:, :, 0, 1]
     targets['eAdt10'] = eAdt[:, :, 1, 0]
     targets['eAdt11'] = eAdt[:, :, 1, 1]
-    targets['eAdt00x'] = targets['eAdt00'] * x
-    targets['eAdt01v'] = targets['eAdt01'] * v
-    targets['eAdt10x'] = targets['eAdt10'] * x
-    targets['eAdt11v'] = targets['eAdt11'] * v
-    test_exp()
-    compare_exp_mw()
+    targets['eAdt'] = eAdt.view(eAdt.shape[0], eAdt.shape[1], eAdt.shape[2]*eAdt.shape[3])
+    mse = test_exp()
     save_probetargets(targets, f'eA_targets.pth', datatype, traintest)
 
 
@@ -143,22 +137,21 @@ def generate_lm_targets(datatype, traintest, maxdeg = 5):
     X_buf = torch.concat((buffer, X), dim = 1)
     x_buf, v_buf = X_buf[:,:,0], X_buf[:,:,1]
     targets = {}
-    print(x_buf[0])
+    oldtargets = {}
     for deg in range(1, maxdeg+1):
         start = maxdeg - deg
         end = start + X.shape[1]
-        print(deg, start, end)
-        targets[f'lm_x{deg}'] = x_buf[:, start : end]
-        targets[f'lm_v{deg}'] = v_buf[:, start : end]
-        targets[f'lm_w2x{deg}'] = omegas**2 * targets[f'lm_x{deg}']
-        targets[f'lm_gv{deg}'] = gammas * targets[f'lm_v{deg}']
-        targets[f'lm_dtw2x{deg}'] = deltat * targets[f'lm_w2x{deg}']
-        targets[f'lm_dtgv{deg}'] = deltat * targets[f'lm_gv{deg}'] 
-        targets[f'lm_dtv{deg}'] = deltat * targets[f'lm_v{deg}']
-    targets['lm_x0'] = y[:,:,0]
-    targets['lm_v0'] = y[:,:,1]
-    targets['lm_w2x0'] = omegas**2 * y[:,:,0]
-    targets['lm_gv0'] = gammas * y[:,:,1]
+        oldtargets[f'lm_x{deg}'] = x_buf[:, start : end]
+        oldtargets[f'lm_v{deg}'] = v_buf[:, start : end]
+        oldtargets[f'lm_w2x{deg}'] = omegas**2 * oldtargets[f'lm_x{deg}']
+        oldtargets[f'lm_gv{deg}'] = gammas * oldtargets[f'lm_v{deg}']
+        oldtargets[f'lm_dtw2x{deg}'] = deltat * oldtargets[f'lm_w2x{deg}']
+        oldtargets[f'lm_dtgv{deg}'] = deltat * oldtargets[f'lm_gv{deg}'] 
+        oldtargets[f'lm_dtv{deg}'] = deltat * oldtargets[f'lm_v{deg}']
+    oldtargets['lm_x0'] = y[:,:,0]
+    oldtargets['lm_v0'] = y[:,:,1]
+    oldtargets['lm_w2x0'] = omegas**2 * y[:,:,0]
+    oldtargets['lm_gv0'] = gammas * y[:,:,1]
 
     def lm_prediction(targets):
         xpred = targets[f'lm_x1']
@@ -173,9 +166,9 @@ def generate_lm_targets(datatype, traintest, maxdeg = 5):
         pred[:,:,1] = vpred
         mse = criterion(pred[:, maxdeg:], y[:, maxdeg:])
         print(mse)
-    lm_prediction(targets)
+    lm_prediction(oldtargets)
 
-    fname = f'lm_targets_deg{maxdeg}.pth'
+    fname = f'lm_targets.pth'
     save_probetargets(targets, fname, datatype, traintest)
 
 def generate_lr_targets(datatype = 'linreg1', traintest = 'train'):
@@ -243,9 +236,10 @@ def create_probetarget_df(datatype, traintest, save = True, reverse = False):
                   'linreg1': ['lr'],
                   'linreg1cca': ['lr_cca'],
                   'rlinreg1': ['rlr'],
-                  'wlinreg1cca': ['lr_cca']}
+                  'wlinreg1cca': ['lr_cca'],
+                  'undamped': ['eA']}
     probetargets = {'targetmethod':[], 'targetname':[], 'targetpath':[], 'deg': [],'datatype':[], 'traintest':[]}
-    nodegmethods = ['mw', 'eA', 'lr', 'rlr']
+    nodegmethods = ['mw', 'eA', 'lr', 'rlr', 'lm']
     for method in allmethods[datatype]:
         dir = f'probe_targets/{datatype}_{traintest}'
         fname = f'{method}_targets'
@@ -405,6 +399,7 @@ def train_cca_probe(input, output, savepath):
     canonical_correlations = np.corrcoef(X_c.T, Y_c.T).diagonal(offset=X_c.shape[1])
     r2 = canonical_correlations**2
     mse = mean_squared_error(X_c, Y_c)
+    breakpoint()
     return r2[0], mse
 
 
@@ -483,13 +478,13 @@ if __name__ == '__main__':
 
     df = get_df_models()
     df = df[df['epoch'] == 20000]
-    lrdf = df[df['datatype'] == 'linreg1']
-    print(lrdf)
-    #lrdf = lrdf[lrdf['layer'] > 3]
-    my_task_id, num_tasks = 0,1
+    lrdf = df[df['datatype'] == 'undamped']
+    my_task_id, num_tasks = None,None
 
-
-    datatype, traintest = 'wlinreg1cca', 'train'
+    datatype, traintest = 'undamped', 'train'
+    # generate_exp_targets(datatype, traintest)
+    # pdf = create_probetarget_df(datatype, traintest)
+    # pmdf = create_probe_model_df(datatype, traintest)
     # generate_lr_cca_targets(datatype, traintest)
     # get_model_hs_df(lrdf, datatype, traintest)
     # create_probetarget_df(datatype, traintest)
@@ -501,7 +496,7 @@ if __name__ == '__main__':
     # datatype = 'wlinreg1cca'
     # mpdf.to_csv(f'dfs/{datatype}_{traintest}_probetorun.csv')
     # print(mpdf['m-layer'].unique(), mpdf['m-emb'].unique())
-    train_cca_probes(datatype, traintest, 5, my_task_id, num_tasks)
+    #train_cca_probes(datatype, traintest, 5, my_task_id, num_tasks)
 
     # datatype, traintest = 'rlinreg1', 'train'
     # get_model_hs_df(lrdf, datatype, traintest)
@@ -509,7 +504,7 @@ if __name__ == '__main__':
     # create_probetarget_df(datatype, traintest, save = True, reverse = True)
     # create_probe_model_df(datatype, traintest, reverse = True)
 
-    #train_probes(datatype, traintest, my_task_id, num_tasks, reverse = True)
+    train_probes(datatype, traintest, my_task_id, num_tasks, reverse = False)
 
 
 
