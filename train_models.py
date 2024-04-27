@@ -173,8 +173,8 @@ if __name__ == '__main__':
     # testdata1 = datadict[f'sequences_test_{datatype}']
     # testdata1 = testdata1[torch.randperm(testdata1.size()[0])]
     datadict = torch.load('data/dampedspring_data.pth')
-    my_task_id = None
-    num_tasks = None
+    my_task_id = 20
+    num_tasks = 48
     titles = ['underdamped', 'overdamped', 'damped']
     Ls = [1,2,3,4,5]
     Ws = [2,4,8,16,32]
@@ -182,9 +182,10 @@ if __name__ == '__main__':
     # testdata = datadict[f'sequences_test_{key}']
     CL = 65
     LWtitles = []
-    for title in titles:
-        for L in Ls:
-            for W in Ws:
+    
+    for L in Ls:
+        for W in Ws:
+            for title in titles:
                 LWtitles.append((L,W, title))
 
     train_many(LWtitles, datadict, CL, my_task_id, num_tasks)
