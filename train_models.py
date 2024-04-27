@@ -142,21 +142,21 @@ def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring'
     
     return model
 
-def train_many(LWs, title, traindata, testdata, CL, my_task_id, num_tasks):
-    #LWs is a list of tuples of (L,W) values to train on
+def train_many(LWtitles, datadict, CL, my_task_id, num_tasks):
+    #LWs is a list of tuples of (L,W, title) values to train on
     if my_task_id is None:
         my_task_id = int(sys.argv[1])
     if num_tasks is None:
         num_tasks = int(sys.argv[2])
-    fnames = LWs
+    fnames = LWtitles
     my_fnames = fnames[my_task_id:len(fnames):num_tasks]
     print(my_fnames)
-    for L,W in my_fnames:
+    for L,W,title in my_fnames:
         config = get_default_config() #linreg_config()
         config.n_layer = L
         config.n_embd = W
         config.max_seq_length = CL + 1
-        train(config, traindata, testdata, fname = title, CL = CL)
+        train(config, datadict[f'sequences_train_{title}'], datadict[f'sequences_test_{title}'], fname = title, CL = CL)
 
 if __name__ == '__main__':
     #generate_springdata(num_samples = 1000, sequence_length=50, plot = False)
@@ -173,26 +173,21 @@ if __name__ == '__main__':
     # testdata1 = datadict[f'sequences_test_{datatype}']
     # testdata1 = testdata1[torch.randperm(testdata1.size()[0])]
     datadict = torch.load('data/dampedspring_data.pth')
-    my_task_id = 0
-    num_tasks = 1
-    nameLsWs = {
-        'underdamped': [[1,2,3,4,5], [2,4,8,16,32]], 
-        'overdamped': [[5,4,3,2,1], [32,16,8,4,2]],
-        'damped': [[5,4,3,2,1], [2,4,8,16,32]]
-    }
-    for key in nameLsWs:
-        traindata = datadict[f'sequences_train_{key}']
-        testdata = datadict[f'sequences_test_{key}']
-        CL = 65
-        Ls = nameLsWs[key][0]
-        Ws = nameLsWs[key][1]
-        LWs = []
+    my_task_id = None
+    num_tasks = None
+    titles = ['underdamped', 'overdamped', 'damped']
+    Ls = [1,2,3,4,5]
+    Ws = [2,4,8,16,32]
+    # traindata = datadict[f'sequences_train_{key}']
+    # testdata = datadict[f'sequences_test_{key}']
+    CL = 65
+    LWtitles = []
+    for title in titles:
         for L in Ls:
             for W in Ws:
-                LWs.append((L,W))
-    
-        title = key
-        train_many(LWs, title, traindata, testdata, CL, my_task_id, num_tasks)
+                LWtitles.append((L,W, title))
+
+    train_many(LWtitles, datadict, CL, my_task_id, num_tasks)
     # traindata2 = datadict['sequences_train_overdamped']
     # traindata2 = traindata2[torch.randperm(traindata2.size()[0])]
     # testdata2 = datadict['sequences_test_overdamped']
