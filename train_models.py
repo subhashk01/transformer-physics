@@ -175,13 +175,17 @@ if __name__ == '__main__':
     datadict = torch.load('data/dampedspring_data.pth')
     my_task_id = 0
     num_tasks = 1
-    keys = ['underdamped', 'overdamped', 'damped']
-    for key in keys:
+    nameLsWs = {
+        'underdamped': [[1,2,3,4,5], [2,4,8,16,32]], 
+        'overdamped': [[5,4,3,2,1], [32,16,8,4,2]],
+        'damped': [[5,4,3,2,1], [2,4,8,16,32]]
+    }
+    for key in nameLsWs:
         traindata = datadict[f'sequences_train_{key}']
         testdata = datadict[f'sequences_test_{key}']
         CL = 65
-        Ls = [1,2,3,4,5]
-        Ws = [2,4,8,16,32]
+        Ls = nameLsWs[key][0]
+        Ws = nameLsWs[key][1]
         LWs = []
         for L in Ls:
             for W in Ws:
