@@ -493,7 +493,9 @@ if __name__ == '__main__':
     # generate_exp_targets(datatype, traintest, reverse=True)
     # pdf = create_probetarget_df(datatype, traintest, reverse = True)
     # mpdf = create_probe_model_df(datatype, traintest, reverse = True)
-    train_probes(datatype, traintest, my_task_id, num_tasks, reverse = True)
+    #train_probes(datatype, traintest, my_task_id, num_tasks, reverse = True)
+    
+    
     #create_probetarget_df(datatype, traintest)
     # pdf = create_probetarget_df(datatype, traintest)
     # pmdf = create_probe_model_df(datatype, traintest)

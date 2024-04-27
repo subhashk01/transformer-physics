@@ -2,17 +2,19 @@ import torch
 from util import set_seed
 import matplotlib.pyplot as plt
 
-set_seed(10)
+set_seed(12)
 
-def generate_springdata(num_samples = 1000, sequence_length=10, plot = False):
-    # Generate x = cos(wt), v = -w*sin(wt). trains on omegas between 0.5pi and 1pi, tests on 0.25pi-0.5pi and 1pi-1.25pi
-    def get_random_start(target_size):
+def get_random_start(target_size):
         # can be used to get x0, v0
         random_numbers = 2 * torch.rand(target_size[0]) - 1
         # Expand each number to a row of 65 identical elements
         expanded_tensor = random_numbers.unsqueeze(1).expand(-1, target_size[1])
         return expanded_tensor
-    
+
+
+
+def generate_springdata(num_samples = 1000, sequence_length=10, plot = False):
+    # Generate x = cos(wt), v = -w*sin(wt). trains on omegas between 0.5pi and 1pi, tests on 0.25pi-0.5pi and 1pi-1.25pi
     def plot_random(sequences):
         # Plot a random sequence
         random_index = torch.randint(0, sequences.shape[0], (1,)).item()
@@ -116,7 +118,7 @@ def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = Fal
     # middle half of the omega interval is the training set
     train_deltat = torch.rand(num_samples) * 2*torch.pi / (sequence_length * train_omegas) # cos(wt) has period 2pi/w. so deltat>2pi/w is redundant
 
-    start = 1
+    start = 0
     skip = 1
     train_times = torch.arange(start, start+skip*sequence_length+1, step = skip).unsqueeze(0).repeat(num_samples, 1)
     train_times = train_times * train_deltat.unsqueeze(1)
@@ -140,15 +142,36 @@ def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = Fal
 
     num_under_test = int(0.5 * test_times.shape[0])
 
+    def plot_random(sequences, gammas, omegas, times):
+        # Plot a random sequence
+        random_index = torch.randint(0, sequences.shape[0], (1,)).item()
+        x = sequences[random_index, :, 0]
+        v = sequences[random_index, :, 1]
+        time = times[random_index]
+        # plt.plot(x,v, marker = 'o')
+        # plt.scatter(x[0], v[0], color = 'r', s = 100, label = 'Start')
+        # plt.xlabel('x')
+        # plt.ylabel('v')
+        # plt.title(f'Sequence {random_index} Plotted in x-v Phase Space\ngamma = {gammas[random_index]:.2f}, omega = {omegas[random_index]:.2f}, x0 = {x[0]:.2f}, v0 = {v[0]:.2f}')
+        # plt.legend()
+        plt.plot(time, x, label = 'x evolution')
+        plt.plot(time, v, label = 'v evolution')
+        plt.title(f'Sequence {random_index} Plotted Till Time {time[-1]:.3f}s\ngamma = {gammas[random_index]:.2f}, omega = {omegas[random_index]:.2f}, x0 = {x[0]:.2f}, v0 = {v[0]:.2f}')
+        plt.legend()
+        plt.show()
 
-    def gen_underdamped(omegas_0, gammas, train_times):
-        omegas = torch.sqrt(omegas_0**2 - gammas**2)
-        wt = omegas.unsqueeze(1) * train_times
-        gt = gammas.unsqueeze(1) * train_times
-        gw = gammas.unsqueeze(1) / omegas.unsqueeze(1)
-        vcoeff = (gammas.unsqueeze(1)**2+omegas.unsqueeze(1)**2) / (omegas.unsqueeze(1))
-        x = torch.exp(-gt) * (torch.cos(wt) + gw * torch.sin(wt))
-        v = -torch.exp(-gt) * vcoeff * torch.sin(wt)
+
+    def gen_underdamped(omegas_0, gammasinp, train_times):
+        omegas = torch.sqrt(omegas_0**2 - gammasinp**2).unsqueeze(1)
+        gammas = gammasinp.unsqueeze(1)
+        wt = omegas * train_times
+        gt = gammas * train_times
+        gw = gammas / omegas
+        x0,v0 = get_random_start(train_times.shape), get_random_start(train_times.shape)
+        xsincoef = (v0+gammas*x0)/omegas
+        x = torch.exp(-gt) * (x0 * torch.cos(wt) + xsincoef * torch.sin(wt))
+        vsincoef = (v0+gammas*x0) * gammas / omegas + omegas * x0
+        v = torch.exp(-gt) * (v0 * torch.cos(wt) - vsincoef * torch.sin(wt))
         seq = torch.stack((x, v), dim=2)
         return seq
 
@@ -163,31 +186,22 @@ def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = Fal
     times_test_under = test_times[:num_under_test]
     sequences_test_under = gen_underdamped(omegas_test_under, gammas_test_under, times_test_under)
 
-    # if plot:
-    #     plt.figure(figsize=(10,10))
-    #     for i in range(4):
-    #         plt.subplot(2,2,i+1)
-    #         i  = omegas_test_under.shape[0]-i-1
-    #         plt.plot(times_train_under[i],sequences_train_under[i,:,0], label = 'x')
-    #         plt.plot(times_train_under[i],sequences_train_under[i,:,1], label = 'v')
-    #         plt.title(f'Omega: {omegas_train_under[i]:.2f}, Gamma: {gammas_train_under[i]:.2f}')
-    #         plt.legend()
-    #     plt.show()
-
-     
-
-
-    # plot sample curves
+    if plot:
+        plot_random(sequences_train_under, gammas_train_under, omegas_train_under, times_train_under)
+    
     
 
-    def gen_overdamped(omegas_0, gammas, train_times):
-        lam = torch.sqrt(gammas**2 - omegas_0**2)
-        lamt = lam.unsqueeze(1) * train_times
-        glam = gammas.unsqueeze(1)/lam.unsqueeze(1)
-        gt = gammas.unsqueeze(1) * train_times
+    def gen_overdamped(omegas_0, gammasinp, train_times):
+        omegas = torch.sqrt(gammasinp**2 - omegas_0**2).unsqueeze(1)
+        gammas = gammasinp.unsqueeze(1)
+        wt = omegas * train_times
+        gt = gammas * train_times
         exp_prec = torch.exp(-gt)/2
-        x = exp_prec * ((1+glam)*torch.exp(lamt) + (1-glam)*torch.exp(-lamt))
-        v = exp_prec * ((1+glam)*(lam.unsqueeze(1)- gammas.unsqueeze(1))*torch.exp(lamt) - (1-glam)*(lam.unsqueeze(1)+gammas.unsqueeze(1))*torch.exp(-lamt))
+        x0,v0 = get_random_start(train_times.shape), get_random_start(train_times.shape)
+        A = x0+(v0+gammas*x0)/omegas
+        B = x0-(v0+gammas*x0)/omegas
+        x = exp_prec * (A*torch.exp(wt)+B*torch.exp(-wt))
+        v = exp_prec * (A*(omegas-gammas)*torch.exp(wt) - B*(omegas+gammas)*torch.exp(-wt))
         seq = torch.stack((x, v), dim=2)
         return seq
 
@@ -202,16 +216,11 @@ def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = Fal
     gammas_test_over = torch.rand(omegas_test_over.shape[0]) * (omega_max-omegas_test_over)+omegas_test_over
     times_test_over = test_times[num_under_test:]
     sequences_test_over = gen_overdamped(omegas_test_over, gammas_test_over, times_test_over)
+
     # if plot:
-    #     plt.figure(figsize=(10,10))
-    #     for i in range(4):
-    #         plt.subplot(2,2,i+1)
-    #         i  = omegas_test_under.shape[0]-i-1
-    #         plt.plot(times_test_over[i],sequences_test_over[i,:,0], label = 'x')
-    #         plt.plot(times_test_over[i],sequences_test_over[i,:,1], label = 'v')
-    #         plt.title(f'Omega: {omegas_test_over[i]:.2f}, Gamma: {gammas_test_over[i]:.2f}')
-    #         plt.legend()
-    #     plt.show()
+    #     plot_random(sequences_train_over, gammas_train_over, omegas_train_over, times_train_over)
+
+
  
     sequences_train_damped = torch.cat((sequences_train_under, sequences_train_over, ), dim = 0)
     sequences_test_damped = torch.cat((sequences_test_under, sequences_test_over), dim = 0)
@@ -324,4 +333,4 @@ if __name__ == '__main__':
     #plot_training_data()
     #playground()
     #generate_linregdata(5000, 65)
-    generate_springdata(5000, 65, plot = True)
+    generate_dampedspringdata(5000, 65, plot = True)

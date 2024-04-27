@@ -104,6 +104,7 @@ class Block(nn.Module):
         # assumes insert is a dictionary of {'inlayerpos': {pCL: value}}
         def replace(x, key):
             if key in insert:
+                print(key)
                 for CL in insert[key].keys():
                     x[:, CL] = torch.tensor(insert[key][CL])
             return x
@@ -172,6 +173,7 @@ class Transformer(nn.Module):
             insert = {}
             layer = i+1
             if layer in insertall:
+                print(layer)
                 insert = insertall[layer]
             x = self.blocks[i](x, layernorm = layernorm, insert = insert)
         if layernorm:

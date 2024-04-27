@@ -83,7 +83,7 @@ def plot_ICL(modeldf, datatype = 'underdamped', traintest = 'train'):
     plt.yscale('log')
     #plt.xscale('log')
     plt.title(f'MSE vs Context Length for {datatype} {traintest} data')
-    plt.legend()
+    plt.legend(loc = 'upper right')
     plt.show()
 
 
@@ -126,11 +126,11 @@ if __name__ == '__main__':
     df = df[df['epoch'] == 20000]
     df = df[df['datatype'] == 'undamped']
     df = df[df['emb'] < 64]
-    get_model_hs_df(df,'undamped', 'train')
+    #get_model_hs_df(df,'undamped', 'train')
     #plot_ICL(df, datatype = 'undamped', traintest = 'train')
     # df = df[df['emb'] == 16]
     # df = df[df['layer'] == 2]
     #plot_ICL(df, datatype = 'linreg1', traintest = 'test')
     #get_model_hs_df(df, datatype = 'linreg1cca', traintest = 'train')
     #get_model_hs_df(df)
-    #plot_ICL(df, datatype = 'overdamped', traintest = 'test')
+    plot_ICL(df, datatype = 'underdamped', traintest = 'train')
