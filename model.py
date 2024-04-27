@@ -43,7 +43,7 @@ class CausalSelfAttention(nn.Module):
 
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1))) # (B, nh, T, T). doing sig(q_i*k_j)/sqrt(len(k)) to find s_ij (NLP notes)
 
-        mask = torch.ones(T,T)*float('-inf')
+        mask = torch.ones(T, T, device=x.device)*float('-inf')
         mask = torch.triu(mask, diagonal=1) #can't look ahead. in first word can only look at first word. not ahead
         mask = mask.repeat(B, n_head, 1, 1)
         att = att + mask
