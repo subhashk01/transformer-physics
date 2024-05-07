@@ -76,17 +76,17 @@ def plot_ICL(modeldf, datatype = 'underdamped', traintest = 'train', modeltype =
         #mses = [mses[:,:i].mean() for i in CLs]
         slope, intercept, r_value = get_log_log_linear(CLs, mses)
         label = f'{row["emb"]}emb_{row["layer"]}layer Last MSE: {mses[-1]:.2e}'
-        print(label)
+        #print(label)
         plt.plot(CLs, mses, label = label)#log(MSE) = {slope:.4f}log(CL) + {intercept:.2f}, R^2 = {r_value**2:.2f}')
         df = pd.DataFrame(savedata)
         df.to_csv(savepath)
-    plt.xlabel("CL")
-    plt.ylabel("MSE")
-    plt.yscale('log')
-    #plt.xscale('log')
-    plt.title(f'MSE vs Context Length for {datatype} {traintest} data {modeltype}')
-    plt.legend(loc = 'upper right')
-    plt.show()
+    # plt.xlabel("CL")
+    # plt.ylabel("MSE")
+    # plt.yscale('log')
+    # #plt.xscale('log')
+    # plt.title(f'MSE vs Context Length for {datatype} {traintest} data {modeltype}')
+    # plt.legend(loc = 'upper right')
+    # plt.show()
 
 def plot_ICL_damped():
     plt.rcParams.update({'font.size': 6})
@@ -209,10 +209,13 @@ if __name__ == '__main__':
     df = get_df_models()
     df = df[df['epoch'] == 20000]
 
-    for modeltype in ['underdamped', 'overdamped', 'damped']:
-        for datatype in ['underdamped', 'overdamped', 'damped']:
-            for traintest in ['train', 'test']:
-                get_model_hs_df(df, modeltype, datatype, traintest)
+    # for modeltype in ['underdamped', 'overdamped', 'damped']:
+    #     for datatype in ['underdamped', 'overdamped', 'damped']:
+    #         for traintest in ['train', 'test']:
+    #             mdf = df[df['modeltype'] == modeltype]
+    #             print(modeltype, datatype, traintest)
+    #             plot_ICL(mdf, datatype = datatype, traintest = traintest, modeltype = modeltype)
+                #get_model_hs_df(df, modeltype, datatype, traintest)
     # for modeltype in ['underdamped', 'overdamped', 'damped']:
     #     df = get_df_models()
     #     df = df[df['epoch'] == 20000]
@@ -220,7 +223,7 @@ if __name__ == '__main__':
     #     df = df[df['emb'] < 64]
     #     for datatype in ['underdamped', 'overdamped']:
     #         plot_ICL(df, datatype = datatype, traintest = 'test', modeltype = modeltype)
-    #plot_ICL_damped()
+    plot_ICL_damped()
     #plot_attention(df.iloc[0], 'undamped', 'train')
     #get_model_hs_df(df,'undamped', 'train')
     #plot_ICL(df, datatype = 'undamped', traintest = 'train')
