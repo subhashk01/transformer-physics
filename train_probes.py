@@ -202,8 +202,10 @@ def train_probes(modeltypes, datatypes, traintests, savename, my_task_id =0,num_
         else:
             append = ''
             input, output = hs, targetval
-        savepath = get_savepath(modelpath, target, layer, inlayerpos, pCL, append)
         save = reverse #only reverse probes are worth saving
+        if save:
+            savepath = get_savepath(modelpath, target, layer, inlayerpos, pCL, append)
+        else: savepath = '' # no reason to save
         r2, mse = train_probe(input,output, savepath, save = save)
         print(f'{index}: layer {layer}, inlayer {inlayerpos}, CL {pCL}|  {target}, R^2 = {r2:.3f}')
         for key in df.columns:
