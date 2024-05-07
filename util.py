@@ -30,7 +30,7 @@ def load_model(df_row, datatype):
 
 def load_model_file(file, config):
     model = Transformer(config)
-    model_state = torch.load(file)
+    model_state = torch.load(file, map_location=torch.device('cpu'))
     model.load_state_dict(model_state)
     model.eval()
     return model

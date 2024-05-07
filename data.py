@@ -326,11 +326,40 @@ def generate_linregdata(num_samples = 5000, sequence_length = 65):
 
     
 
+def plot_dampedspringdata():
+    data = torch.load('data/dampedspring_data.pth')
+    colors = ['r', 'b']
+    plt.rcParams.update({'font.size': 6})
+    fig, axs = plt.subplots(2,1, sharex = True, figsize = (4,3))
+    fig.subplots_adjust(hspace=0)
+    for i, plottype in enumerate(['underdamped', 'overdamped']):
+        sequences_train = data[f'sequences_train_{plottype}']
+        omegas_train = data[f'omegas_train_{plottype}']
+        times_train = data[f'times_train_{plottype}']
+        gammas_train = data[f'gammas_train_{plottype}']
+        deltats_train = times_train[:,1] - times_train[:,0]
+        index = times_train[:,-1].argmax()
+        color = colors[i]
+        sequence, omega, times, gamma, deltat = sequences_train[index], omegas_train[index], times_train[index], gammas_train[index], deltats_train[index]
+        append = '\n' + rf'$\gamma = {gamma:.2f}, \omega = {omega:.2f}, \Delta t = {deltat:.3f}$'
+        ks = list(range(len(times)))
+        axs[0].plot(ks, sequence[:,0], label = rf'{plottype} $x_k$'+append, color = color)
+        axs[1].plot(ks, sequence[:,1], label = rf'{plottype} $v_k$'+append, color = color, linestyle = '--')
 
-
+        print(f'{plottype} omega = {omega:.2f}, gamma = {gamma:.2f}')
+    fig.suptitle('Sample Generated Underdamped and Overdamped SHO Data')
+    axs[0].set_ylabel(r'$x_k$')
+    axs[1].set_ylabel(r'$v_k$')
+    axs[1].set_xlabel(r'$k$ (t = k$\Delta t$)')
+    axs[0].legend()
+    axs[1].legend()
+    plt.savefig('figures/dampedspringdata.png', bbox_inches = 'tight', dpi = 300)
+    
+    plt.show()
 if __name__ == '__main__':
     #generate_dampedspringdata(num_samples = 10000, sequence_length=65, plot = False)
     #plot_training_data()
     #playground()
     #generate_linregdata(5000, 65)
-    generate_dampedspringdata(5000, 65, plot = True)
+    #generate_dampedspringdata(5000, 65, plot = True)
+    plot_dampedspringdata()
