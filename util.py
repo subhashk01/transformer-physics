@@ -74,6 +74,12 @@ def get_log_log_linear(x,y, return_mse = False):
         return slope, intercept, r_value, mse
     return slope, intercept, r_value
 
+def get_mtype_dtype_ttype(df, modeltype, datatype, traintest):
+    df_mtype = df[df['m-modeltype'] == modeltype]
+    df_dtype = df_mtype[df_mtype['h-datatype'] == datatype]
+    df_ttype = df_dtype[df_dtype['h-traintest'] == traintest]
+    return df_ttype
+
 def get_model_df(df, layer, emb):
     df_model = df[(df['m-layer'] == layer) & (df['m-emb'] == emb)]
     return df_model
@@ -95,4 +101,4 @@ def get_layer_pos(df, layerpos, inlayerpos):
 
 if __name__ == '__main__':
     df = 'x'
-    get_layer_pos(df, 0, 0)
+    #get_layer_pos(df, 0, 0)

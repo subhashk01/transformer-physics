@@ -179,8 +179,7 @@ def save_probetargets(targets, fname, datatype, traintest):
 if __name__ == '__main__':
 
 
-    traintest = 'test'
-    for datatype in ['underdamped', 'overdamped', 'damped']:
+    for datatype in ['undamped']:
         for traintest in ['train', 'test']:
             generate_exp_targets(datatype, traintest, maxdeg = 5, reverse = False)
             generate_rk_targets(datatype, traintest, maxdeg = 5, reverse=False)

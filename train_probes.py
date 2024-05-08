@@ -22,10 +22,10 @@ def create_probetarget_df(datatypes, traintests, reverse = False):
                   'linreg1': ['lr'],
                   'linreg1cca': ['lr_cca'],
                   'rlinreg1': ['rlr'],
-                  'wlinreg1cca': ['lr_cca'],
-                  'undamped': [f'{prec}eA']}
+                  'wlinreg1cca': ['lr_cca']}
     allmethods['damped'] = allmethods['underdamped']
     allmethods['overdamped'] = allmethods['underdamped']
+    allmethods['undamped'] = allmethods['underdamped']
     nodegmethods = ['lr', 'rlr']
     alldfs = None
     for datatype in datatypes:
@@ -122,7 +122,7 @@ def get_savepath(modelpath, targetname, layer, inlayerpos, CL, append = ''):
     return savepath
 
 
-def get_dftorun(modeltypes, datatypes, traintests, reverse = False, cca = False):
+def get_dftorun(modeltypes, datatypes, traintests, savename, reverse = False, cca = False):
     allmodeldatatraintest = [(modeltype, datatype, traintest) for modeltype in modeltypes for datatype in datatypes for traintest in traintests]
     df = None
     i = 0
@@ -145,6 +145,12 @@ def get_dftorun(modeltypes, datatypes, traintests, reverse = False, cca = False)
         df = df[df['p-targetmethod'].str.contains('cca')]
     # reset index of df
     df = df.reset_index(drop = True)
+    # save df
+    if reverse:
+        df.to_csv(f'dfs/{savename}_reverseprobetorun.csv')
+    else:
+        df.to_csv(f'dfs/{savename}_probetorun.csv')
+
     return df
 
 def train_probe(input, output, savepath, save = True):
@@ -166,8 +172,9 @@ def train_probe(input, output, savepath, save = True):
 def train_probes(modeltypes, datatypes, traintests, savename, my_task_id =0,num_tasks = 1, reverse = False):
     
     # get rid of all entries in df with "cca" in their targetmethod
-    df = get_dftorun(modeltypes, datatypes, traintests, reverse = reverse, cca = False)
+    df = get_dftorun(modeltypes, datatypes, traintests, savename, reverse = reverse, cca = False)
     print(len(df))
+
     savedir = f'proberesults_{savename}'
     if savedir not in os.listdir('dfs/proberesults'):
         os.mkdir(f'dfs/proberesults/{savedir}')
@@ -186,6 +193,8 @@ def train_probes(modeltypes, datatypes, traintests, savename, my_task_id =0,num_
     print(max(my_indices))
     for i, index in enumerate(my_indices):
         row = df.iloc[index]
+        if row['m-emb'] != 16 or row['m-layer'] != 4:
+            continue
         pCL = row['p-CL']
         layer = row['h-layerpos']
         inlayerpos = row['h-inlayerpos']
@@ -222,26 +231,28 @@ def train_probes(modeltypes, datatypes, traintests, savename, my_task_id =0,num_
     minidfdf.to_csv(f'dfs/proberesults/{savedir}/proberesults_{savename}_{my_task_id}.csv')
     #minidf.to_csv(f'dfs/proberesults/proberesults_{my_task_id}.csv')
 
-def train_cca_probe(input, output, savepath):
+def train_cca_probe(input, output, savepath, save = True):
     input, output = input.detach().numpy(), output.detach().numpy()
     cca = CCA(n_components=1)
     cca.fit(input, output)
-    torch.save(cca, savepath)
+    if save:
+        torch.save(cca, savepath)
     X_c, Y_c = cca.transform(input, output)
     canonical_correlations = np.corrcoef(X_c.T, Y_c.T).diagonal(offset=X_c.shape[1])
     r2 = canonical_correlations**2
     mse = mean_squared_error(X_c, Y_c)
-    breakpoint()
     return r2[0], mse
 
 
-def train_cca_probes(modeltypes, datatypes, traintests, maxdeg, savename, my_task_id =0, num_tasks = 1):
+def train_cca_probes(modeltypes, datatypes, traintests, savename, maxdeg = 5, my_task_id =0, num_tasks = 1, save = False):
     if my_task_id is None:
         my_task_id = int(sys.argv[1])
     if num_tasks is None:
         num_tasks = int(sys.argv[2])
 
-    df = get_dftorun(modeltypes, datatypes, traintests, reverse = False, cca = False)
+    df = get_dftorun(modeltypes, datatypes, traintests, reverse = False, cca = True)
+    print(len(df))
+
     # get all indices in df
 
     savedir = f'proberesults_{savename}'
@@ -273,12 +284,15 @@ def train_cca_probes(modeltypes, datatypes, traintests, maxdeg, savename, my_tas
             targetpath = row['p-targetpath']
             targetval = torch.load(targetpath)[target][:, pCL, :deg]
             modelpath = row['m-modelpath']
-            savepath = get_savepath(modelpath, target, layer, inlayerpos, pCL, append = f'deg{deg}')
+            if save:
+                savepath = get_savepath(modelpath, target, layer, inlayerpos, pCL, append = f'deg{deg}')
+            else: savepath = ''
             varhs = torch.var(hs, dim=0, unbiased=False)
+            print(max(varhs), varhs.mean())
             if max(varhs) < 1e-4:
                 r2, mse = 0, float('inf')
             else:
-                r2, mse = train_cca_probe(hs,targetval, savepath)
+                r2, mse = train_cca_probe(hs,targetval, savepath, save)
             #print(f'{index}: layer {layer}, inlayer {inlayerpos}, CL {pCL}|  {target}, deg{deg}, R^2 = {r2:.3f}')
             for key in df.columns:
                 minidf[key].append(row[key])
@@ -295,7 +309,7 @@ def train_cca_probes(modeltypes, datatypes, traintests, maxdeg, savename, my_tas
                         'deg': f'{deg}',
                         'R^2': f'{r2:.3f}'
                         })
-            if (i+1) % 100 == 0:
+            if (i+1) % 1000 == 0:
                 minidfdf = pd.DataFrame(minidf)
                 minidfdf.to_csv(saveprobes)
 
@@ -308,17 +322,23 @@ def train_cca_probes(modeltypes, datatypes, traintests, maxdeg, savename, my_tas
 
 if __name__ == '__main__':
 
-    my_task_id, num_tasks = None,None
+    my_task_id, num_tasks = 0,1
 
-    modeltypes = ['underdamped', 'overdamped', 'damped']
-    datatypes = ['underdamped', 'overdamped', 'damped']
+    modeltypes = ['undamped']
+    datatypes = ['undamped']
     traintests = ['train', 'test']
 
-    #pdf = create_probetarget_df(datatypes, traintests)
+    # pdf = create_probetarget_df(datatypes, traintests)
     # print(pdf)
-    # print(len(pdf))
-    #mpdf = create_probe_model_df(modeltypes, datatypes, traintests)
-    train_probes(modeltypes, datatypes, traintests, 'ALLDAMPEDSPRING', my_task_id, num_tasks)
+    # # print(len(pdf))
+    # mpdf = create_probe_model_df(modeltypes, datatypes, traintests)
+    # print(len(mpdf))
+    savestr = 'ALLUNDAMPEDSPRING'
+    # ccastr = savestr + 'CCA'
+    train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = False)
+    train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = False)
+    # maxdeg = 5
+    #train_cca_probes(modeltypes, datatypes, traintests, ccastr, maxdeg, my_task_id, num_tasks)
     #create_probe_model_df(modeltypes, datatypes, traintests)
 
     #generate_exp_targets(datatype, traintest)
