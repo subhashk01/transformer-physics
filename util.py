@@ -53,7 +53,7 @@ def get_data(datatype = 'underdamped', traintest = 'train'):
         gammas = torch.zeros(omegas.shape)
         return gammas, omegas, sequences, times, deltat
     elif 'damped' in datatype:
-        data = torch.load('data/dampedspring_data.pth')
+        data = torch.load('data/dampedspring5_data.pth')
         gammas = data[f'gammas_{traintest}_{datatype}']
         omegas = data[f'omegas_{traintest}_{datatype}']
         sequences = data[f'sequences_{traintest}_{datatype}']

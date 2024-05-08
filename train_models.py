@@ -172,10 +172,10 @@ if __name__ == '__main__':
     # traindata1 = traindata1[torch.randperm(traindata1.size()[0])]
     # testdata1 = datadict[f'sequences_test_{datatype}']
     # testdata1 = testdata1[torch.randperm(testdata1.size()[0])]
-    datadict = torch.load('data/dampedspring_data.pth')
-    my_task_id = 20
-    num_tasks = 48
-    titles = ['underdamped', 'overdamped', 'damped']
+    datadict = torch.load('data/dampedspring5_data.pth')
+    my_task_id = None
+    num_tasks = None
+    titles = ['underdamped']
     Ls = [1,2,3,4,5]
     Ws = [2,4,8,16,32]
     # traindata = datadict[f'sequences_train_{key}']

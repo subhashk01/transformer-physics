@@ -109,15 +109,15 @@ def omega1to2(w1, w2, num_samples = 1000, sequence_length=10):
     return sequences_w1, sequences_w2
 
 
-def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = False):
+def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = False, deltat_mult = 1):
     # Generate x = cos(wt), v = -w*sin(wt). trains on omegas between 0.5pi and 1pi, tests on 0.25pi-0.5pi and 1pi-1.25pi
-    omegas_range = [0.5*torch.pi, 2.5*torch.pi]
+    omegas_range = [0.25*torch.pi, 1.25*torch.pi]
     delta_omega  = omegas_range[1]-omegas_range[0]
     
     train_omegas = torch.rand(num_samples) * delta_omega/2 + omegas_range[0] + delta_omega/4
     # middle half of the omega interval is the training set
-    train_deltat = torch.rand(num_samples) * 2*torch.pi / (sequence_length * train_omegas) # cos(wt) has period 2pi/w. so deltat>2pi/w is redundant
-
+    train_deltat = torch.rand(num_samples) * 2*torch.pi / (sequence_length * train_omegas) * deltat_mult# cos(wt) has period 2pi/w. so deltat>2pi/w is redundant
+    print(train_deltat)
     start = 0
     skip = 1
     train_times = torch.arange(start, start+skip*sequence_length+1, step = skip).unsqueeze(0).repeat(num_samples, 1)
@@ -267,7 +267,7 @@ def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = Fal
 
 
 
-    }, f'data/dampedspring_data.pth')
+    }, f'data/dampedspring{deltat_mult}_data.pth')
     # if plot:
     #     plt.hist(train_omegas, color = 'b', label = 'Training Omegas', bins=20)
     #     plt.hist(test_omegas, color = 'r', label = 'Test Omegas', bins=20)
@@ -367,7 +367,16 @@ if __name__ == '__main__':
     #plot_training_data()
     #playground()
     #generate_linregdata(5000, 65)
-    #generate_dampedspringdata(5000, 65, plot = True)
-    fname = 'rk_targets_deg5.pth'
-    inspect_probe_targets(fname, datatype = 'underdamped', traintest = 'train')
+    # generate_dampedspringdata(10000, 65, plot = False, deltat_mult = 1)
+    # generate_dampedspringdata(10000, 65, plot = False, deltat_mult = .1)
+    mult = 8
+    generate_dampedspringdata(20000, 65, plot = False, deltat_mult = mult)
+    # fname = 'rk_targets_deg5.pth'
+    # inspect_probe_targets(fname, datatype = 'underdamped', traintest = 'train')
     #plot_dampedspringdata()
+    d1 = torch.load(f'data/dampedspring{mult}_data.pth')['sequences_train_underdamped']
+    print(d1[:,37])
+    # find nan values
+    
+    # find log mean
+    print(torch.log(d1[:,-1].abs()).mean())
