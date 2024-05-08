@@ -369,8 +369,8 @@ if __name__ == '__main__':
     #generate_linregdata(5000, 65)
     # generate_dampedspringdata(10000, 65, plot = False, deltat_mult = 1)
     # generate_dampedspringdata(10000, 65, plot = False, deltat_mult = .1)
-    mult = 1
-    generate_dampedspringdata(10000, 65, plot = False, deltat_mult = mult)
+    mult = 5
+    # generate_dampedspringdata(10000, 65, plot = False, deltat_mult = mult)
     # fname = 'rk_targets_deg5.pth'
     # inspect_probe_targets(fname, datatype = 'underdamped', traintest = 'train')
     #plot_dampedspringdata()

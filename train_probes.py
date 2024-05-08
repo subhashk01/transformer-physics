@@ -192,7 +192,6 @@ def train_probes(modeltypes, datatypes, traintests, savename, my_task_id =0,num_
     minidf['p-savepath'] = []
     print(my_indices[0], my_indices[-1])
     for i, index in enumerate(my_indices):
-        print(index)
         row = df.iloc[index]
         pCL = row['p-CL']
         layer = row['h-layerpos']
@@ -327,14 +326,15 @@ if __name__ == '__main__':
     datatypes = ['undamped']
     traintests = ['train', 'test']
 
-    # pdf = create_probetarget_df(datatypes, traintests)
+    # pdf = create_probetarget_df(datatypes, traintests, reverse = True)
     # print(pdf)
     # # print(len(pdf))
-    # mpdf = create_probe_model_df(modeltypes, datatypes, traintests)
+    # mpdf = create_probe_model_df(modeltypes, datatypes, traintests, reverse = True)
     # print(len(mpdf))
     savestr = 'ALLUNDAMPEDSPRING'
+
     # ccastr = savestr + 'CCA'
-    train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = False)
+    train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = True)
     #train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = False)
     # maxdeg = 5
     #train_cca_probes(modeltypes, datatypes, traintests, ccastr, maxdeg, my_task_id, num_tasks)
