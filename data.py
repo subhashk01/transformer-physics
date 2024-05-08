@@ -356,10 +356,18 @@ def plot_dampedspringdata():
     plt.savefig('figures/dampedspringdata.png', bbox_inches = 'tight', dpi = 300)
     
     plt.show()
+
+
+def inspect_probe_targets(fname, datatype, traintest):
+    pt = torch.load(f'probe_targets/{datatype}_{traintest}/{fname}')
+    print(pt.keys())
+    print(pt['Adt1'])
 if __name__ == '__main__':
     #generate_dampedspringdata(num_samples = 10000, sequence_length=65, plot = False)
     #plot_training_data()
     #playground()
     #generate_linregdata(5000, 65)
     #generate_dampedspringdata(5000, 65, plot = True)
-    plot_dampedspringdata()
+    fname = 'rk_targets_deg5.pth'
+    inspect_probe_targets(fname, datatype = 'underdamped', traintest = 'train')
+    #plot_dampedspringdata()
