@@ -369,14 +369,16 @@ if __name__ == '__main__':
     #generate_linregdata(5000, 65)
     # generate_dampedspringdata(10000, 65, plot = False, deltat_mult = 1)
     # generate_dampedspringdata(10000, 65, plot = False, deltat_mult = .1)
-    mult = 8
-    generate_dampedspringdata(20000, 65, plot = False, deltat_mult = mult)
+    mult = 1
+    generate_dampedspringdata(10000, 65, plot = False, deltat_mult = mult)
     # fname = 'rk_targets_deg5.pth'
     # inspect_probe_targets(fname, datatype = 'underdamped', traintest = 'train')
     #plot_dampedspringdata()
     d1 = torch.load(f'data/dampedspring{mult}_data.pth')['sequences_train_underdamped']
-    print(d1[:,37])
-    # find nan values
+    print(d1.shape)
+    # print(d1[:,37])
+    # # find nan values
     
-    # find log mean
-    print(torch.log(d1[:,-1].abs()).mean())
+    # # find log mean
+    # print(torch.log(d1[:,-1].abs()).mean())
+

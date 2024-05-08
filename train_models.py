@@ -98,17 +98,18 @@ def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring'
         model.eval()
         total_test_in_loss = 0
         total_test_out_loss = 0
-        with torch.no_grad():
-            for batch_X, batch_y in test_in_loader:
-                batch_X, batch_y = batch_X.to(device), batch_y.to(device)
-                output = model(batch_X)
-                loss = criterion(output, batch_y)
-                total_test_in_loss += loss.item()
-            for batch_X, batch_y in test_out_loader:
-                batch_X, batch_y = batch_X.to(device), batch_y.to(device)
-                output = model(batch_X)
-                loss = criterion(output, batch_y)
-                total_test_out_loss += loss.item()
+        #TODO: UNCOMMENT THIS, PUT TEST LOSS BACK IN IF WE WANT IT
+        # with torch.no_grad():
+        #     for batch_X, batch_y in test_in_loader:
+        #         batch_X, batch_y = batch_X.to(device), batch_y.to(device)
+        #         output = model(batch_X)
+        #         loss = criterion(output, batch_y)
+        #         total_test_in_loss += loss.item()
+        #     for batch_X, batch_y in test_out_loader:
+        #         batch_X, batch_y = batch_X.to(device), batch_y.to(device)
+        #         output = model(batch_X)
+        #         loss = criterion(output, batch_y)
+        #         total_test_out_loss += loss.item()
 
         # Calculate test loss for the epoch
         epoch_test_in_loss = total_test_in_loss / len(test_in_loader)
