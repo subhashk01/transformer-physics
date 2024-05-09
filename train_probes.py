@@ -174,8 +174,11 @@ def train_probes(modeltypes, datatypes, traintests, savename, my_task_id =0,num_
     # get rid of all entries in df with "cca" in their targetmethod
     df = get_dftorun(modeltypes, datatypes, traintests, savename, reverse = reverse, cca = False)
     print(len(df))
+    prec = ''
+    if reverse:
+        prec = 'reverse'
 
-    savedir = f'proberesults_{savename}'
+    savedir = f'{prec}proberesults_{savename}'
     if savedir not in os.listdir('dfs/proberesults'):
         os.mkdir(f'dfs/proberesults/{savedir}')
     
@@ -250,6 +253,7 @@ def train_cca_probes(modeltypes, datatypes, traintests, savename, maxdeg = 5, my
 
     df = get_dftorun(modeltypes, datatypes, traintests, reverse = False, cca = True)
     print(len(df))
+
 
     # get all indices in df
 
@@ -334,7 +338,7 @@ if __name__ == '__main__':
     savestr = 'ALLUNDAMPEDSPRING'
 
     # ccastr = savestr + 'CCA'
-    train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = True)
+    train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = False)
     #train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = False)
     # maxdeg = 5
     #train_cca_probes(modeltypes, datatypes, traintests, ccastr, maxdeg, my_task_id, num_tasks)
