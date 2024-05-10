@@ -222,15 +222,21 @@ def generate_dampedspringdata(num_samples = 1000, sequence_length=10, plot = Fal
 
 
  
-    sequences_train_damped = torch.cat((sequences_train_under, sequences_train_over, ), dim = 0)
-    sequences_test_damped = torch.cat((sequences_test_under, sequences_test_over), dim = 0)
-    omegas_train_damped = torch.cat((omegas_train_under, omegas_train_over), dim = 0)
-    omegas_test_damped = torch.cat((omegas_test_under, omegas_test_over), dim = 0)
-    times_train_damped = torch.cat((times_train_under, times_train_over), dim = 0)
-    times_test_damped = torch.cat((times_test_under, times_test_over), dim = 0)
-    gammas_train_damped = torch.cat((gammas_train_under, gammas_train_over), dim = 0)
-    gammas_test_damped = torch.cat((gammas_test_under, gammas_test_over), dim = 0)
+    sequences_train_damped = torch.cat((sequences_train_under, sequences_train_over), dim = 0)
+    indices = torch.randperm(sequences_train_damped.shape[0])[:len(sequences_train_under)]
 
+    sequences_train_damped = sequences_train_damped[indices]
+    omegas_train_damped = torch.cat((omegas_train_under, omegas_train_over), dim = 0)[indices]
+    times_train_damped = torch.cat((times_train_under, times_train_over), dim = 0)[indices]
+    gammas_train_damped = torch.cat((gammas_train_under, gammas_train_over), dim = 0)[indices]
+
+    sequences_test_damped = torch.cat((sequences_test_under, sequences_test_over), dim = 0)
+    indices = torch.randperm(sequences_test_damped.shape[0])[:len(sequences_test_under)]
+    
+    sequences_test_damped = sequences_test_damped[indices]
+    omegas_test_damped = torch.cat((omegas_test_under, omegas_test_over), dim = 0)[indices]
+    times_test_damped = torch.cat((times_test_under, times_test_over), dim = 0)[indices]
+    gammas_test_damped = torch.cat((gammas_test_under, gammas_test_over), dim = 0)[indices]
 
 
     torch.save({
@@ -326,8 +332,8 @@ def generate_linregdata(num_samples = 5000, sequence_length = 65):
 
     
 
-def plot_dampedspringdata():
-    data = torch.load('data/dampedspring_data.pth')
+def plot_dampedspringdata(mult = 1):
+    data = torch.load(f'data/dampedspring{mult}_data.pth')
     colors = ['r', 'b']
     plt.rcParams.update({'font.size': 6})
     fig, axs = plt.subplots(2,1, sharex = True, figsize = (4,3))
@@ -351,31 +357,31 @@ def plot_dampedspringdata():
     axs[0].set_ylabel(r'$x_k$')
     axs[1].set_ylabel(r'$v_k$')
     axs[1].set_xlabel(r'$k$ (t = k$\Delta t$)')
-    axs[0].legend()
-    axs[1].legend()
+    axs[0].legend(loc = 'upper right')
+    axs[1].legend(loc = 'upper right')
     plt.savefig('figures/dampedspringdata.png', bbox_inches = 'tight', dpi = 300)
     
     plt.show()
 
 
-def inspect_probe_targets(fname, datatype, traintest):
-    pt = torch.load(f'probe_targets/{datatype}_{traintest}/{fname}')
-    print(pt.keys())
-    print(pt['Adt1'])
+# def inspect_probe_targets(fname, datatype, traintest):
+#     pt = torch.load(f'probe_targets/{datatype}_{traintest}/{fname}')
+#     print(pt.keys())
+#     print(pt['Adt1'])
 if __name__ == '__main__':
     #generate_dampedspringdata(num_samples = 10000, sequence_length=65, plot = False)
     #plot_training_data()
     #playground()
     #generate_linregdata(5000, 65)
-    # generate_dampedspringdata(10000, 65, plot = False, deltat_mult = 1)
+    #generate_dampedspringdata(10000, 65, plot = False, deltat_mult = 1)
     # generate_dampedspringdata(10000, 65, plot = False, deltat_mult = .1)
-    mult = 5
+    #mult = 1
     # generate_dampedspringdata(10000, 65, plot = False, deltat_mult = mult)
-    # fname = 'rk_targets_deg5.pth'
+    fname = 'rk_targets_deg5.pth'
     # inspect_probe_targets(fname, datatype = 'underdamped', traintest = 'train')
-    #plot_dampedspringdata()
-    d1 = torch.load(f'data/dampedspring{mult}_data.pth')['sequences_train_underdamped']
-    print(d1.shape)
+    #plot_dampedspringdata(mult = mult)
+    # d1 = torch.load(f'data/dampedspring{mult}_data.pth')['sequences_train_underdamped']
+    # print(d1.shape)
     # print(d1[:,37])
     # # find nan values
     

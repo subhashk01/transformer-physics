@@ -44,7 +44,7 @@ def get_df_models():
     df = df.sort_values(by=['layer', 'emb'])
     return df
 
-def plot_ICL(df, datatype = 'underdamped', traintest = 'train', modeltype = ''):
+def plot_ICL(df, datatype = 'underdamped', traintest = 'train', modeltype = 'underdamped'):
     plt.figure(figsize = (10,10))
     modeldf = df[df['modeltype'] == modeltype]
     savedata = {'emb':[], 'layer':[], 'CL':[], 'mse':[]}
@@ -77,7 +77,7 @@ def plot_ICL(df, datatype = 'underdamped', traintest = 'train', modeltype = ''):
         #mses = [mses[:,:i].mean() for i in CLs]
         slope, intercept, r_value = get_log_log_linear(CLs, mses)
         label = f'{row["emb"]}emb_{row["layer"]}layer Last MSE: {mses[-1]:.2e}'
-        #print(label)
+        print(label)
         plt.plot(CLs, mses, label = label)#log(MSE) = {slope:.4f}log(CL) + {intercept:.2f}, R^2 = {r_value**2:.2f}')
         df = pd.DataFrame(savedata)
         df.to_csv(savepath)
@@ -212,13 +212,16 @@ if __name__ == '__main__':
     df = df[df['epoch'] == 20000]
     df = df[df['emb']<64]
 
-    for modeltype in ['undamped']:
-        for datatype in ['undamped']:
+    for modeltype in ['underdamped', 'overdamped']:
+        for datatype in ['underdamped', 'overdamped']:
             for traintest in ['train', 'test']:
                 mdf = df[df['modeltype'] == modeltype]
-                print(modeltype, datatype, traintest)
-                print(len(mdf))
                 #plot_ICL(mdf, datatype = datatype, traintest = traintest, modeltype = modeltype)
+
+                # print(modeltype, datatype, traintest)
+                # print(len(mdf))
+                # if traintest == 'test':
+                #     plot_ICL(mdf, datatype = datatype, traintest = traintest, modeltype = modeltype)
                 hsdf = get_model_hs_df(mdf, modeltype, datatype, traintest)
                 print(len(hsdf))
     # for modeltype in ['underdamped', 'overdamped', 'damped']:

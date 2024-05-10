@@ -113,6 +113,9 @@ def generate_exp_targets(datatype, traintest, reverse = False, maxdeg = 5):
     ccafname = f'{prec}eA_cca_targets_deg{maxdeg}.pth'
     save_probetargets(ccatargets, ccafname, datatype, traintest)
 
+    for key in targets.keys():
+        print(targets[key].shape)
+
     fname = f'{prec}eA_targets_deg{maxdeg}.pth'
     save_probetargets(targets, fname, datatype, traintest)
 
@@ -179,7 +182,7 @@ def save_probetargets(targets, fname, datatype, traintest):
 if __name__ == '__main__':
 
 
-    for datatype in ['undamped']:
+    for datatype in ['underdamped', 'overdamped']:
         for traintest in ['train', 'test']:
             generate_exp_targets(datatype, traintest, maxdeg = 5, reverse = True)
             generate_rk_targets(datatype, traintest, maxdeg = 5, reverse = True)

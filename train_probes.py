@@ -324,22 +324,22 @@ def train_cca_probes(modeltypes, datatypes, traintests, savename, maxdeg = 5, my
 
 if __name__ == '__main__':
 
-    my_task_id, num_tasks = 0,48
+    my_task_id, num_tasks = None,None
 
-    modeltypes = ['undamped']
-    datatypes = ['undamped']
+    modeltypes = ['underdamped', 'overdamped']
+    datatypes = ['underdamped', 'overdamped']
     traintests = ['train', 'test']
 
-    # pdf = create_probetarget_df(datatypes, traintests, reverse = True)
-    # print(pdf)
+    pdf = create_probetarget_df(datatypes, traintests, reverse = True)
+    print(pdf)
     # # print(len(pdf))
     # mpdf = create_probe_model_df(modeltypes, datatypes, traintests, reverse = True)
     # print(len(mpdf))
-    savestr = 'ALLUNDAMPEDSPRING'
+    savestr = 'ALLDAMPEDSPRING'
 
     # ccastr = savestr + 'CCA'
-    train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = False)
-    #train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = False)
+    # train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = False)
+    # train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = True)
     # maxdeg = 5
     #train_cca_probes(modeltypes, datatypes, traintests, ccastr, maxdeg, my_task_id, num_tasks)
     #create_probe_model_df(modeltypes, datatypes, traintests)

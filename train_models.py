@@ -27,8 +27,8 @@ def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring'
     if 'linreg' in fname:
         traindata = traindata.unsqueeze(-1)
         testdata = testdata.unsqueeze(-1)
-
-    traindata = traindata[:,:CL+1,:] # only use 10 timesteps for transformer predictions. it's shown an ability to learn off of this.
+    #TODO; ONLY USING 5000 DATAPOINTS IS THAT BAD
+    traindata = traindata[:5000,:CL+1,:] # only use 10 timesteps for transformer predictions. it's shown an ability to learn off of this.
     X, y = traindata[:,:-1,:], traindata[:,1:,:]
     #X, y = trainxy #TODO CHANGE IMPLEMENTATION
     
@@ -159,6 +159,21 @@ def train_many(LWtitles, datadict, CL, my_task_id, num_tasks):
         config.max_seq_length = CL + 1
         train(config, datadict[f'sequences_train_{title}'], datadict[f'sequences_test_{title}'], fname = title, CL = CL)
 
+def whatmodesltrain(LWtitles):
+    numtasks = 40
+    print(len(LWtitles))
+    x = 0
+    # get list of all items from see.txt without spaces or newline character
+    # read in 
+
+    for mytaskid in range(numtasks):
+        lw = LWtitles[mytaskid:len(LWtitles):numtasks]
+        print(f'{mytaskid}: {lw}')
+        x+=len(lw)
+    print(x)
+
+
+
 if __name__ == '__main__':
     #generate_springdata(num_samples = 1000, sequence_length=50, plot = False)
     # datadict = torch.load('data/spring_data.pth')
@@ -176,19 +191,19 @@ if __name__ == '__main__':
     datadict = torch.load('data/dampedspring5_data.pth')
     my_task_id = None
     num_tasks = None
-    titles = ['underdamped']
+    titles = ['damped']
     Ls = [1,2,3,4,5]
     Ws = [2,4,8,16,32]
     # traindata = datadict[f'sequences_train_{key}']
     # testdata = datadict[f'sequences_test_{key}']
-    CL = 65
+    CL = 33
     LWtitles = []
     
     for L in Ls:
         for W in Ws:
             for title in titles:
                 LWtitles.append((L,W, title))
-
+    #whatmodesltrain(LWtitles)
     train_many(LWtitles, datadict, CL, my_task_id, num_tasks)
     # traindata2 = datadict['sequences_train_overdamped']
     # traindata2 = traindata2[torch.randperm(traindata2.size()[0])]
