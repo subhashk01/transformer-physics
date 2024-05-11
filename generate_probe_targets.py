@@ -64,14 +64,20 @@ def generate_rk_targets(datatype, traintest, maxdeg = 5, reverse = False):
         loss = criterion(ypred, y)
         print(f"Loss for degree {deg}: {loss:.2e}")
 
+
+    if reverse:
+        for deg in range(2,maxdeg+1):
+            tocat = [targets[f'{prec}Adt{i}'] for i in range(1, deg+1)]
+            targets[f'{prec}Adt1{deg}'] = torch.concatenate(tocat, dim = -1)
+
     for key in targets.keys():
         print(targets[key].shape)
-    breakpoint()
     
     ccafname = f'{prec}rk_cca_targets_deg{maxdeg}.pth'
     save_probetargets(ccatargets, ccafname, datatype, traintest)
     fname = f'{prec}rk_targets_deg{maxdeg}.pth'
     save_probetargets(targets, fname, datatype, traintest)
+    return targets
 
 
 def generate_exp_targets(datatype, traintest, reverse = False, maxdeg = 5):
@@ -110,7 +116,11 @@ def generate_exp_targets(datatype, traintest, reverse = False, maxdeg = 5):
         ccatargets[f'{prec}eAdt10'][:,:,deg-1] = eAdtpow[:,:,1,0]
         ccatargets[f'{prec}eAdt11'][:,:,deg-1] = eAdtpow[:,:,1,1]
         targets[f'{prec}eAdt{deg}'] = eAdtpow.view(eAdtpow.shape[0], eAdtpow.shape[1], eAdtpow.shape[2]*eAdtpow.shape[3])
-
+    
+    if reverse:
+        for deg in range(2,maxdeg+1):
+            tocat = [targets[f'{prec}eAdt{i}'] for i in range(1, deg+1)]
+            targets[f'{prec}eAdt1{deg}'] = torch.concatenate(tocat, dim = -1)
 
     mse = test_exp()
     print(mse)
@@ -121,6 +131,23 @@ def generate_exp_targets(datatype, traintest, reverse = False, maxdeg = 5):
         print(targets[key].shape)
 
     fname = f'{prec}eA_targets_deg{maxdeg}.pth'
+    save_probetargets(targets, fname, datatype, traintest)
+    return targets
+
+def generate_rkexp_targets_REVERSE(datatype, traintest, maxdeg = 5):
+    exptargets = generate_exp_targets(datatype, traintest, reverse = True, maxdeg = maxdeg)
+    rktargets = generate_rk_targets(datatype, traintest, reverse = True, maxdeg = maxdeg)
+
+    targets = {}
+    for deg in range(1, maxdeg+1):
+        if deg == 1:
+            key = '1'
+        else: key = f'1{deg}'
+        targets[f'rkeAdt1{deg}'] = torch.concatenate((exptargets[f'reAdt{key}'], rktargets[f'rAdt{key}']), dim = -1)
+    for key in targets.keys():
+        print(key, targets[key].shape)
+
+    fname = f'rrkeA_targets_deg{maxdeg}.pth'
     save_probetargets(targets, fname, datatype, traintest)
 
 def generate_lr_targets(datatype = 'linreg1', traintest = 'train'):
@@ -186,12 +213,11 @@ def save_probetargets(targets, fname, datatype, traintest):
 if __name__ == '__main__':
 
 
-    for datatype in ['undamped', 'overdamped']:
+    for datatype in ['overdamped']:
         for traintest in ['train', 'test']:
-            for reverse in [False,True]:
+            for reverse in [True, False]:
                 print(f'Generating targets for {datatype} {traintest}')
-                #generate_exp_targets(datatype, traintest, maxdeg = 5, reverse = reverse)
+                generate_exp_targets(datatype, traintest, maxdeg = 5, reverse = reverse)
                 generate_rk_targets(datatype, traintest, maxdeg = 5, reverse = reverse)
-                break
-            break
-        break
+                if reverse:
+                    generate_rkexp_targets_REVERSE(datatype, traintest, maxdeg = 5)

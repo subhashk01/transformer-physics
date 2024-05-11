@@ -23,15 +23,21 @@ def create_probetarget_df(datatypes, traintests, reverse = False):
                   'linreg1cca': ['lr_cca'],
                   'rlinreg1': ['rlr'],
                   'wlinreg1cca': ['lr_cca']}
-    allmethods['damped'] = allmethods['underdamped']
-    allmethods['overdamped'] = allmethods['underdamped']
-    allmethods['undamped'] = allmethods['underdamped']
+    allmethods['damped'] = allmethods['underdamped'].copy()
+    allmethods['overdamped'] = allmethods['underdamped'].copy()
+    allmethods['undamped'] = allmethods['underdamped'].copy()
+    if reverse:
+        for mtype in allmethods:
+            print(mtype)
+            if 'damped' in mtype:
+                allmethods[mtype].append('rrkeA')
     nodegmethods = ['lr', 'rlr']
     alldfs = None
     for datatype in datatypes:
         for traintest in traintests:
             probetargets = {'targetmethod':[], 'targetname':[], 'targetpath':[], 'deg': [],'datatype':[], 'traintest':[]}
             for method in allmethods[datatype]:
+                print(method)
                 dir = f'probe_targets/{datatype}_{traintest}'
                 fname = f'{method}_targets'
                 if not method in nodegmethods:
@@ -212,7 +218,8 @@ def train_probes(modeltypes, datatypes, traintests, savename, my_task_id =0,num_
         else:
             append = ''
             input, output = hs, targetval
-        save = reverse #only reverse probes are worth saving
+        #save = reverse #only reverse probes are worth saving
+        save = False
         if save:
             savepath = get_savepath(modelpath, target, layer, inlayerpos, pCL, append)
         else: savepath = '' # no reason to save
@@ -327,15 +334,18 @@ if __name__ == '__main__':
     my_task_id, num_tasks = None,None
 
     modeltypes = ['underdamped', 'overdamped']
-    datatypes = ['underdamped', 'overdamped']
+    datatypes = ['overdamped', 'underdamped']
     traintests = ['train', 'test']
 
     pdf = create_probetarget_df(datatypes, traintests, reverse = True)
-    print(pdf)
+
+    #
+    #print(pdf[pdf['']])
+    #print(pdf[(pdf['datatype']=='underdamped') & (pdf['traintest']=='train')])
     # # print(len(pdf))
     # mpdf = create_probe_model_df(modeltypes, datatypes, traintests, reverse = True)
     # print(len(mpdf))
-    savestr = 'ALLDAMPEDSPRING'
+    #savestr = 'ALLDAMPEDSPRING'
 
     # ccastr = savestr + 'CCA'
     # train_probes(modeltypes, datatypes, traintests, savestr, my_task_id, num_tasks, reverse = False)
