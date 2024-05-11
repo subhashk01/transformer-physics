@@ -28,6 +28,8 @@ def train(config, traindata, testdata,CL=65, loadmodel = False, fname = 'spring'
         traindata = traindata.unsqueeze(-1)
         testdata = testdata.unsqueeze(-1)
     #TODO; ONLY USING 5000 DATAPOINTS IS THAT BAD
+    # randomize trandata
+    traindata = traindata[torch.randperm(traindata.size()[0])]
     traindata = traindata[:5000,:CL+1,:] # only use 10 timesteps for transformer predictions. it's shown an ability to learn off of this.
     X, y = traindata[:,:-1,:], traindata[:,1:,:]
     #X, y = trainxy #TODO CHANGE IMPLEMENTATION

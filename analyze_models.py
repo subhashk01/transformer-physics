@@ -5,6 +5,7 @@ import torch
 import os
 import re
 from util import load_model, get_data, get_log_log_linear
+from sklearn.metrics import r2_score
 
 def get_df_models():
     # NEED LOSS PATHS SOMEHOW
@@ -47,7 +48,7 @@ def get_df_models():
 def plot_ICL(df, datatype = 'underdamped', traintest = 'train', modeltype = 'underdamped'):
     plt.figure(figsize = (10,10))
     modeldf = df[df['modeltype'] == modeltype]
-    savedata = {'emb':[], 'layer':[], 'CL':[], 'mse':[]}
+    savedata = {'emb':[], 'layer':[], 'CL':[], 'mse':[], 'r2x':[], 'r2v':[]}
     if len(modeltype) > 0:
         savepath = f'dfs/{modeltype}_{datatype}_{traintest}_ICL.csv'
     else: savepath = f'dfs/{datatype}_{traintest}_ICL.csv'
@@ -65,7 +66,10 @@ def plot_ICL(df, datatype = 'underdamped', traintest = 'train', modeltype = 'und
         CLs = range(1, y.shape[1]+1)
         mses = ((ypred - y)**2).mean(dim=2).detach()
         mses = mses.mean(dim=0).numpy()
+
         for i in range(len(CLs)):
+            r2x = r2_score(y[:,i,0], ypred[:,i,0].detach())
+            r2v = r2_score(y[:,i,1], ypred[:,i,1].detach())
             savedata['emb'].append(row['emb'])
             savedata['layer'].append(row['layer'])
             CL = i
@@ -73,6 +77,8 @@ def plot_ICL(df, datatype = 'underdamped', traintest = 'train', modeltype = 'und
                 CL = i*2
             savedata['CL'].append(CL)
             savedata['mse'].append(mses[i])
+            savedata['r2x'].append(r2x)
+            savedata['r2v'].append(r2v)
         #print(mses.shape)
         #mses = [mses[:,:i].mean() for i in CLs]
         slope, intercept, r_value = get_log_log_linear(CLs, mses)
@@ -97,7 +103,7 @@ def plot_ICL_damped():
     for i, datatype in enumerate(['underdamped', 'overdamped']):
         colors = 'rbg'
         ax = axs[i]
-        for j, modeltype in enumerate(['underdamped', 'overdamped', 'damped']):
+        for j, modeltype in enumerate(['underdamped', 'overdamped']):
             modeldf = pd.read_csv(f'dfs/{modeltype}_{datatype}_{traintest}_ICL.csv')
             #mdflast = modeldf[modeldf['CL'] == modeldf['CL'].max()]
             #make model_best the model with best average mse across CL
@@ -212,18 +218,20 @@ if __name__ == '__main__':
     df = df[df['epoch'] == 20000]
     df = df[df['emb']<64]
 
-    for modeltype in ['underdamped', 'overdamped']:
-        for datatype in ['underdamped', 'overdamped']:
-            for traintest in ['train', 'test']:
+    #plot_ICL_damped()
+
+    for modeltype in ['underdamped', 'damped']:
+        for datatype in ['underdamped']:
+            for traintest in ['train']:
                 mdf = df[df['modeltype'] == modeltype]
-                #plot_ICL(mdf, datatype = datatype, traintest = traintest, modeltype = modeltype)
+                plot_ICL(mdf, datatype = datatype, traintest = traintest, modeltype = modeltype)
 
                 # print(modeltype, datatype, traintest)
                 # print(len(mdf))
                 # if traintest == 'test':
                 #     plot_ICL(mdf, datatype = datatype, traintest = traintest, modeltype = modeltype)
-                hsdf = get_model_hs_df(mdf, modeltype, datatype, traintest)
-                print(len(hsdf))
+                # hsdf = get_model_hs_df(mdf, modeltype, datatype, traintest)
+                # print(len(hsdf))
     # for modeltype in ['underdamped', 'overdamped', 'damped']:
     #     df = get_df_models()
     #     df = df[df['epoch'] == 20000]

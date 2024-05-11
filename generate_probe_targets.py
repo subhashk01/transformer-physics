@@ -63,6 +63,10 @@ def generate_rk_targets(datatype, traintest, maxdeg = 5, reverse = False):
         ypred = (totalmat @ X.unsqueeze(-1)).squeeze(-1)
         loss = criterion(ypred, y)
         print(f"Loss for degree {deg}: {loss:.2e}")
+
+    for key in targets.keys():
+        print(targets[key].shape)
+    breakpoint()
     
     ccafname = f'{prec}rk_cca_targets_deg{maxdeg}.pth'
     save_probetargets(ccatargets, ccafname, datatype, traintest)
@@ -182,7 +186,12 @@ def save_probetargets(targets, fname, datatype, traintest):
 if __name__ == '__main__':
 
 
-    for datatype in ['underdamped', 'overdamped']:
+    for datatype in ['undamped', 'overdamped']:
         for traintest in ['train', 'test']:
-            generate_exp_targets(datatype, traintest, maxdeg = 5, reverse = True)
-            generate_rk_targets(datatype, traintest, maxdeg = 5, reverse = True)
+            for reverse in [False,True]:
+                print(f'Generating targets for {datatype} {traintest}')
+                #generate_exp_targets(datatype, traintest, maxdeg = 5, reverse = reverse)
+                generate_rk_targets(datatype, traintest, maxdeg = 5, reverse = reverse)
+                break
+            break
+        break
