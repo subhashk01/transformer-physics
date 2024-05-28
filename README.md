@@ -1,7 +1,7 @@
 
 # How Do Transformers "Do" Physics?     
 
-This is the github repo for the paper 'How Do Transformers "Do" Physics? Investigating the Simple Harmonic Oscillator'. INSERT PAPER. 
+This is the github repo for the paper ['How Do Transformers "Do" Physics? Investigating the Simple Harmonic Oscillator'](https://arxiv.org/abs/2405.17209).
 
 How do transformers model physics? By investigating model internals, we find that transformers likely use the matrix exponential numerical method to model the simple harmonic oscillator. We believe our methodology will also help uncover that transformers use to model higher order linear differential equations and some nonlinear systems, potentially revealing their internal "world model."
 
